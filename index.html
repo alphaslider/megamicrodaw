@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>MEGAMICRODAW // v4.3.0_STABLE</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root { 
+            --bg: #0a0c10; --panel: #1a1d23; --text: #70a1ff; --accent: #1e90ff; 
+            --danger: #ff4757; --step-off: #2f3542; --step-on: #70a1ff;
+        }
+        body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; text-transform: uppercase; padding: 20px; margin: 0; }
+        #chassis { border: 1px solid #3e4451; padding: 15px; background: var(--panel); max-width: 1400px; margin: 0 auto; box-shadow: 0 10px 40px rgba(0,0,0,0.8); }
+        .panel { border: 1px solid #3e4451; padding: 10px; margin-bottom: 10px; background: #13151a; border-radius: 4px; }
+        .flex { display: flex; gap: 10px; align-items: center; }
+        button { background: #2f3542; color: #fff; border: 1px solid #3e4451; cursor: pointer; padding: 6px 12px; font-size: 10px; border-radius: 3px; }
+        button:hover { background: var(--accent); }
+        button.active { background: var(--accent) !important; border-color: #fff !important; box-shadow: 0 0 10px var(--accent); }
+        .track-row { display: grid; grid-template-columns: 120px 1fr 90px 40px; gap: 10px; margin-bottom: 5px; align-items: center; background: #1a1d23; padding: 5px; border-radius: 4px; }
+        .step-grid { display: grid; grid-template-columns: repeat(32, 1fr); gap: 3px; width: 100%; }
+        .playhead-slot { height: 4px; background: transparent; }
+        .playhead-slot.active { background: #fff; box-shadow: 0 0 10px #fff; }
+        .step { height: 24px; border-radius: 2px; cursor: pointer; background: var(--step-off); }
+        .step.on { background: var(--step-on); }
+        .step.beat-mark { border-left: 2px solid #57606f; }
+        .mixer-rack { display: flex; gap: 12px; overflow-x: auto; min-height: 500px; padding: 15px; background: #0a0c10; border: 1px solid #333; }
+        .mixer-strip { width: 180px; border: 1px solid #3e4451; padding: 12px; background: #13151a; border-radius: 6px; flex-shrink: 0; display: flex; flex-direction: column; }
+        .fx-stack { flex-grow: 1; margin: 10px 0; border: 1px inset #000; background: #080808; padding: 5px; min-height: 200px; overflow-y: auto; }
+        input[type=range] { accent-color: var(--accent); width: 100%; cursor: pointer; margin: 10px 0; }
+        .data-font { font-size: 10px; letter-spacing: 1px; color: #a4b0be; font-family: monospace; }
+        #status-led { width: 10px; height: 10px; border-radius: 50%; background: #444; }
+        #status-led.online { background: #2ecc71; box-shadow: 0 0 8px #2ecc71; }
+    </style>
+</head>
+<body>
+<div id="chassis">
+    <div class="panel flex" style="justify-content: space-between;">
+        <div class="flex">
+            <div id="status-led"></div>
+            <button id="pBtn" onclick="engine.toggle()" style="font-weight:bold; width:80px;">START</button>
+            <button onclick="engine.panic()" style="color:var(--danger)">PANIC</button>
+            <button id="modeBtn" onclick="ui.toggleMode()" style="background:#8e44ad;">MODE: PATTERN</button>
+            <div class="data-font">BPM <input type="number" id="bpm" value="120" style="width:50px; background:#000; color:var(--text); border:1px solid #333" onchange="engine.bpm = this.value"></div>
+        </div>
+        <div class="flex">
+            <button onclick="io.exportSession()" style="background:#2ecc71;">EXPORT</button>
+            <button onclick="document.getElementById('importInput').click()" style="background:#f39c12;">IMPORT</button>
+            <input type="file" id="importInput" style="display:none" onchange="io.importSession(this)">
+        </div>
+        <div class="flex">
+            <button id="tSeq" class="active" onclick="ui.tab('seq')">SEQUENCER</button>
+            <button id="tMix" onclick="ui.tab('mix')">MIXER</button>
+        </div>
+    </div>
+
+    <div id="transport-display" class="data-font" style="text-align:center; color:#fff; background:#000; padding:8px; margin-bottom:10px;">BAR: 01 | PAT: 01 | STEP: 01</div>
+
+    <div id="page-seq">
+        <div class="panel flex" id="bank-nav"></div>
+        <div id="track-rack" class="panel">
+            <div class="flex" style="margin-bottom:15px">
+                <button onclick="engine.addTrack()" style="background:var(--accent);">+ NEW TRACK</button>
+                <div class="flex" style="margin-left:20px; border:1px solid #333; padding:4px;">
+                    <button onclick="engine.updateBankLength(-1)">&lt;</button>
+                    <span class="data-font" id="bank-len-disp" style="min-width:110px; text-align:center;">PAT 1 LEN: 16</span>
+                    <button onclick="engine.updateBankLength(1)">&gt;</button>
+                </div>
+            </div>
+            <div style="display: grid; grid-template-columns: 120px 1fr 90px 40px; gap: 10px;">
+                <div></div><div id="playhead-grid" class="step-grid"></div><div></div><div></div>
+            </div>
+            <div id="tracks-list"></div>
+        </div>
+        <div class="panel">
+            <div class="data-font">SONG_ARRANGER</div>
+            <div id="song-arranger-box" class="flex" style="background:#0a0c10; padding:10px; margin-top:5px; overflow-x:auto;">
+                <button onclick="engine.addSongCell()">+ ADD CELL</button>
+                <button onclick="engine.removeSongCell()" style="color:var(--danger)">- REMOVE</button>
+                <div id="song-cells" class="flex" style="margin-left:15px"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="page-mix" style="display:none">
+        <div id="mixer-rack" class="mixer-rack"></div>
+    </div>
+</div>
+
+<script>
+const engine = {
+    ctx: null, master: null, tracks: [], mixer: [], song: [0],
+    bpm: 120, playing: false, step: 0, bank: 0, songIdx: 0, nextTime: 0, timer: null,
+    bankLengths: Array(8).fill(16),
+
+    initChannels() {
+        if (this.ctx) return;
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        this.ctx = new AudioContext();
+        this.master = this.ctx.createGain();
+        this.master.connect(this.ctx.destination);
+        for(let i=0; i<8; i++) {
+            const input = this.ctx.createGain();
+            const output = this.ctx.createGain();
+            input.connect(output); 
+            output.connect(this.master);
+            this.mixer.push({ input, output, fx: [] });
+        }
+    },
+
+    async toggle() {
+        this.initChannels();
+        if (this.ctx.state === 'suspended') await this.ctx.resume();
+        this.playing = !this.playing;
+        if (this.playing) {
+            this.nextTime = this.ctx.currentTime;
+            this.scheduler();
+        } else {
+            this.stopAll();
+        }
+        document.getElementById('pBtn').innerText = this.playing ? "STOP" : "START";
+        document.getElementById('status-led').className = this.ctx.state === 'running' ? 'online' : '';
+    },
+
+    scheduler() {
+        if (!this.playing) return;
+        while (this.nextTime < this.ctx.currentTime + 0.1) {
+            const activeBank = ui.mode === 'song' ? this.song[this.songIdx] : this.bank;
+            this.playStep(this.step, this.nextTime, activeBank);
+            this.nextTime += (60 / this.bpm / 4);
+            this.step++;
+            if(this.step >= this.bankLengths[activeBank]) {
+                this.step = 0;
+                if (ui.mode === 'song') {
+                    this.songIdx = (this.songIdx + 1) % this.song.length;
+                    requestAnimationFrame(() => ui.render());
+                }
+            }
+        }
+        this.timer = setTimeout(() => this.scheduler(), 25);
+    },
+
+    playStep(s, t, b) {
+        this.tracks.forEach(tr => {
+            if (tr.buffer && tr.patterns[b][s]) {
+                const channel = this.mixer[tr.bus];
+                
+                // 1. Trigger FX Envelopes
+                channel.fx.forEach(plugin => {
+                    if (plugin.trigger) plugin.trigger(t); 
+                });
+
+                // 2. Mono-Trigger (De-click old source)
+                if (tr.activeSource && tr.gainNode) {
+                    tr.gainNode.gain.cancelAndHoldAtTime(t);
+                    tr.gainNode.gain.exponentialRampToValueAtTime(0.0001, t + 0.005);
+                    tr.activeSource.stop(t + 0.005);
+                }
+
+                // 3. New Source
+                const src = this.ctx.createBufferSource();
+                const g = this.ctx.createGain();
+                src.buffer = tr.buffer;
+                src.connect(g);
+                g.connect(channel.input);
+                src.start(t);
+                tr.activeSource = src;
+                tr.gainNode = g;
+            }
+        });
+        requestAnimationFrame(() => ui.updateTransport(s, b));
+    },
+
+    stopAll() {
+        clearTimeout(this.timer);
+        this.step = 0;
+        this.songIdx = 0;
+        this.tracks.forEach(t => {
+            if(t.activeSource && t.gainNode) {
+                t.gainNode.gain.cancelAndHoldAtTime(this.ctx.currentTime);
+                t.gainNode.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + 0.05);
+                t.activeSource.stop(this.ctx.currentTime + 0.05);
+            }
+        });
+        ui.render(); 
+        ui.updateTransport(0, ui.mode === 'song' ? this.song[0] : this.bank);
+    },
+
+    panic() {
+        this.stopAll();
+        this.playing = false;
+        document.getElementById('pBtn').innerText = "START";
+    },
+
+    rebuildChain(chIdx) {
+        const ch = this.mixer[chIdx];
+        ch.input.disconnect();
+        ch.fx.forEach(f => { if(f.output) f.output.disconnect(); });
+        let prev = ch.input;
+        if (ch.fx.length > 0) {
+            ch.fx.forEach(f => {
+                if (f.input && f.output) {
+                    prev.connect(f.input);
+                    prev = f.output;
+                }
+            });
+        }
+        prev.connect(ch.output);
+    },
+
+    async injectFX(chIdx, file, codeOverride = null) {
+        this.initChannels();
+        try {
+            const code = codeOverride || await file.text();
+            const blob = new Blob([code], { type: 'application/javascript' });
+            const url = URL.createObjectURL(blob);
+            const mod = await import(url + '#' + Date.now());
+            const instance = new (mod.default || Object.values(mod)[0])(this.ctx);
+            instance._sourceCode = code;
+            this.mixer[chIdx].fx.push(instance);
+            this.rebuildChain(chIdx);
+            ui.renderMixer();
+        } catch (err) { console.error("FX Load Error:", err); }
+    },
+
+    removeFX(chIdx, fxIdx) {
+        this.mixer[chIdx].fx.splice(fxIdx, 1);
+        this.rebuildChain(chIdx);
+        ui.renderMixer();
+    },
+
+    addTrack() {
+        this.tracks.push({ 
+            id: Date.now()+Math.random(), buffer: null, fileName: "EMPTY", 
+            bus: 0, activeSource: null, gainNode: null,
+            patterns: Array.from({length:8}, () => Array(32).fill(false)) 
+        });
+        ui.render();
+    },
+    addSongCell() { this.song.push(0); ui.render(); },
+    removeSongCell() { if(this.song.length > 1) { this.song.pop(); ui.render(); } },
+    updateBankLength(dir) {
+        let val = this.bankLengths[this.bank] + (dir * 4);
+        this.bankLengths[this.bank] = Math.max(4, Math.min(32, val));
+        ui.render();
+    }
+};
+
+const ui = {
+    mode: 'pattern',
+    tab(name) {
+        engine.initChannels();
+        document.getElementById('page-seq').style.display = name === 'seq' ? 'block' : 'none';
+        document.getElementById('page-mix').style.display = name === 'mix' ? 'block' : 'none';
+        document.getElementById('tSeq').className = name === 'seq' ? 'active' : '';
+        document.getElementById('tMix').className = name === 'mix' ? 'active' : '';
+        if(name === 'mix') this.renderMixer();
+    },
+    toggleMode() {
+        this.mode = (this.mode === 'pattern') ? 'song' : 'pattern';
+        document.getElementById('modeBtn').innerText = `MODE: ${this.mode.toUpperCase()}`;
+        this.render();
+    },
+    render() {
+        const b = (this.mode === 'song') ? engine.song[engine.songIdx] : engine.bank;
+        const list = document.getElementById('tracks-list'); 
+        if(!list) return;
+        document.getElementById('bank-len-disp').innerText = `PAT ${b+1} LEN: ${engine.bankLengths[b]}`;
+        list.innerHTML = '';
+        const ph = document.getElementById('playhead-grid'); ph.innerHTML = '';
+        for(let i=0; i<32; i++) ph.innerHTML += `<div class="playhead-slot"></div>`;
+
+        engine.tracks.forEach((t, i) => {
+            const row = document.createElement('div'); row.className = 'track-row';
+            row.innerHTML = `
+                <div><button onclick="this.nextElementSibling.click()">LOAD</button><input type="file" style="display:none" onchange="ui.loadSmp(${t.id}, this)"><div class="data-font" style="font-size:8px;">${t.fileName}</div></div>
+                <div class="step-grid" id="grid-${t.id}"></div>
+                <select class="data-font" style="background:#000;color:var(--text);border:1px solid #333;" onchange="engine.tracks[${i}].bus=this.value; engine.rebuildChain(this.value)">
+                    ${engine.mixer.map((_,m)=>`<option value="${m}" ${t.bus==m?'selected':''}>CH ${m+1}</option>`).join('')}
+                </select>
+                <button onclick="engine.tracks.splice(${i},1);ui.render()" style="color:var(--danger)">X</button>`;
+            list.appendChild(row);
+            const grid = document.getElementById(`grid-${t.id}`);
+            for(let s=0; s<32; s++) {
+                const step = document.createElement('div');
+                step.className = `step ${t.patterns[b][s] ? 'on' : ''} ${s % 4 === 0 ? 'beat-mark' : ''}`;
+                step.style.opacity = s >= engine.bankLengths[b] ? "0.1" : "1";
+                step.onclick = () => { if(s < engine.bankLengths[b]) { t.patterns[b][s] = !t.patterns[b][s]; step.classList.toggle('on'); } };
+                grid.appendChild(step);
+            }
+        });
+        this.renderBanks(); this.renderSong();
+    },
+    renderMixer() {
+        const rack = document.getElementById('mixer-rack'); if(!rack) return;
+        rack.innerHTML = '';
+        engine.mixer.forEach((ch, i) => {
+            const strip = document.createElement('div'); strip.className = 'mixer-strip';
+            strip.innerHTML = `<div class="data-font" style="text-align:center; padding-bottom:5px; border-bottom:1px solid #333">CH ${i+1}</div><div class="fx-stack"></div><button onclick="this.nextElementSibling.click()">+ FX LOADER</button><input type="file" style="display:none" onchange="engine.injectFX(${i}, this.files[0])"><div class="data-font" style="margin-top:10px">VOL</div><input type="range" min="0" max="1.5" step="0.01" value="${ch.output.gain.value}" oninput="engine.mixer[${i}].output.gain.value=this.value">`;
+            rack.appendChild(strip);
+            const stack = strip.querySelector('.fx-stack');
+            ch.fx.forEach((fx, idx) => {
+                const box = document.createElement('div'); box.style.border = "1px solid #444"; box.style.marginBottom="5px"; box.style.background="#000";
+                if(fx.renderUI) fx.renderUI(box, () => engine.removeFX(i, idx));
+                stack.appendChild(box);
+            });
+        });
+    },
+    async loadSmp(id, el) {
+        engine.initChannels();
+        const tr = engine.tracks.find(t => t.id === id);
+        const file = el.files[0]; if(!file) return;
+        tr.fileName = file.name.substring(0, 10);
+        const arrayBuffer = await file.arrayBuffer();
+        tr.buffer = await engine.ctx.decodeAudioData(arrayBuffer);
+        ui.render();
+    },
+    updateTransport(s, b) {
+        const disp = document.getElementById('transport-display');
+        if(disp) disp.innerText = `BAR: ${String(engine.songIdx+1).padStart(2,'0')} | PAT: ${String(b+1).padStart(2,'0')} | STEP: ${String(s+1).padStart(2,'0')}`;
+        const ph = document.getElementById('playhead-grid');
+        if(ph && ph.children[s]) {
+            Array.from(ph.children).forEach(c => c.classList.remove('active'));
+            ph.children[s].classList.add('active');
+        }
+        this.renderBanks();
+    },
+    renderBanks() {
+        const nav = document.getElementById('bank-nav'); if(!nav) return;
+        nav.innerHTML = '';
+        const currentActiveBank = (this.mode === 'song') ? engine.song[engine.songIdx] : engine.bank;
+        for(let i=0; i<8; i++) {
+            const btn = document.createElement('button'); btn.innerText = i+1;
+            btn.className = (currentActiveBank === i) ? 'active' : '';
+            btn.onclick = () => { this.mode = 'pattern'; engine.bank = i; this.render(); };
+            nav.appendChild(btn);
+        }
+    },
+    renderSong() {
+        const container = document.getElementById('song-cells'); if(!container) return; 
+        container.innerHTML = '';
+        engine.song.forEach((bank, idx) => {
+            const cell = document.createElement('button'); cell.innerText = bank + 1;
+            if(this.mode === 'song' && engine.songIdx === idx) cell.style.borderColor = "#fff";
+            cell.onclick = () => { engine.song[idx] = (engine.song[idx] + 1) % 8; ui.renderSong(); };
+            container.appendChild(cell);
+        });
+    }
+};
+const io = {
+    async exportSession() {
+        const zip = new JSZip();
+        const data = {
+            bpm: engine.bpm, bankLengths: engine.bankLengths, song: engine.song,
+            tracks: engine.tracks.map(t => ({ id: t.id, bus: t.bus, patterns: t.patterns, fileName: t.fileName })),
+            mixer: engine.mixer.map(m => ({ gain: m.output.gain.value, fxCodes: m.fx.map(f => f._sourceCode) }))
+        };
+        zip.file("project.json", JSON.stringify(data));
+        const blob = await zip.generateAsync({type:"blob"});
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = "session.daw"; a.click();
+    },
+    async importSession(el) {
+        if(!el.files[0]) return;
+        const zip = await JSZip.loadAsync(el.files[0]);
+        const data = JSON.parse(await zip.file("project.json").async("string"));
+        engine.bpm = data.bpm; engine.bankLengths = data.bankLengths; engine.song = data.song;
+        engine.tracks = data.tracks.map(t => ({ ...t, buffer: null }));
+        engine.mixer.forEach(async (m, i) => {
+            m.output.gain.value = data.mixer[i].gain;
+            m.fx = [];
+            if(data.mixer[i].fxCodes) {
+                for(const code of data.mixer[i].fxCodes) await engine.injectFX(i, null, code);
+            }
+        });
+        ui.render();
+    }
+};
+engine.addTrack();
+ui.render();
+</script>
+</body>
+</html>
