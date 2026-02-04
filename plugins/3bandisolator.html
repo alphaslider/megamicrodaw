@@ -1,0 +1,83 @@
+/**
+ * MICRO_DAW // FX_MODULE: 3-BAND_ISOLATOR
+ * CONTRACT: { input, output, name, renderUI }
+ */
+
+export default class DJIsolator {
+    constructor(ctx) {
+        this.ctx = ctx;
+        this.name = "DJ_ISO_v1";
+
+        // Signal Chain
+        this.input = ctx.createGain();
+        
+        // Filter Nodes
+        this.lowShelf = ctx.createBiquadFilter();
+        this.midBand = ctx.createBiquadFilter();
+        this.highShelf = ctx.createBiquadFilter();
+        
+        this.output = ctx.createGain();
+
+        // Configure Filters
+        this.lowShelf.type = "lowshelf";
+        this.lowShelf.frequency.value = 300; // Crossover at 300Hz
+
+        this.midBand.type = "peaking";
+        this.midBand.frequency.value = 1000;
+        this.midBand.Q.value = 0.7;
+
+        this.highShelf.type = "highshelf";
+        this.highShelf.frequency.value = 3500; // Crossover at 3.5kHz
+
+        // Route in Series for cumulative isolation
+        this.input.connect(this.lowShelf);
+        this.lowShelf.connect(this.midBand);
+        this.midBand.connect(this.highShelf);
+        this.highShelf.connect(this.output);
+
+        // Parameters (0 to 1, where 0.5 is neutral/0dB)
+        this.params = { low: 0.5, mid: 0.5, high: 0.5 };
+    }
+
+    updateGains() {
+        // Map 0.0->1.0 to -40dB->+12dB
+        const calcGain = (val) => (val * 52) - 40;
+        
+        this.lowShelf.gain.setTargetAtTime(calcGain(this.params.low), this.ctx.currentTime, 0.02);
+        this.midBand.gain.setTargetAtTime(calcGain(this.params.mid), this.ctx.currentTime, 0.02);
+        this.highShelf.gain.setTargetAtTime(calcGain(this.params.high), this.ctx.currentTime, 0.02);
+    }
+
+    renderUI(container, onPurge) {
+        container.style.padding = "8px";
+        container.style.background = "#1a1a1a";
+        container.style.borderBottom = "1px solid #00ff41";
+        
+        container.innerHTML = `
+            <div style="display:flex; justify-content:space-between; font-size:9px; margin-bottom:10px;">
+                <span style="color:#00ff41">${this.name}</span>
+                <span style="color:#ff0055; cursor:pointer;" id="iso-purge"> [X] </span>
+            </div>
+            <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:5px; text-align:center; font-size:8px;">
+                <div>LOW<br><input type="range" orient="vertical" min="0" max="1" step="0.01" value="${this.params.low}" id="low-cut" style="height:60px; -webkit-appearance: slider-vertical;"></div>
+                <div>MID<br><input type="range" orient="vertical" min="0" max="1" step="0.01" value="${this.params.mid}" id="mid-cut" style="height:60px; -webkit-appearance: slider-vertical;"></div>
+                <div>HI<br><input type="range" orient="vertical" min="0" max="1" step="0.01" value="${this.params.high}" id="hi-cut" style="height:60px; -webkit-appearance: slider-vertical;"></div>
+            </div>
+        `;
+
+        const inputs = {
+            low: container.querySelector('#low-cut'),
+            mid: container.querySelector('#mid-cut'),
+            high: container.querySelector('#hi-cut')
+        };
+
+        Object.keys(inputs).forEach(key => {
+            inputs[key].oninput = (e) => {
+                this.params[key] = parseFloat(e.target.value);
+                this.updateGains();
+            };
+        });
+
+        container.querySelector('#iso-purge').onclick = onPurge;
+    }
+}
