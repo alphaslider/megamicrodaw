@@ -1,8 +1,9 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MEGAMICRODAW // v4.3.0_STABLE</title>
+    <title>MEGAMICRODAW // v4.3.2_STABLE</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
         :root { 
@@ -18,8 +19,19 @@
         button.active { background: var(--accent) !important; border-color: #fff !important; box-shadow: 0 0 10px var(--accent); }
         .track-row { display: grid; grid-template-columns: 120px 1fr 90px 40px; gap: 10px; margin-bottom: 5px; align-items: center; background: #1a1d23; padding: 5px; border-radius: 4px; }
         .step-grid { display: grid; grid-template-columns: repeat(32, 1fr); gap: 3px; width: 100%; }
-        .playhead-slot { height: 4px; background: transparent; }
-        .playhead-slot.active { background: #fff; box-shadow: 0 0 10px #fff; }
+        
+        /* THE GLOWING DOT PLAYHEAD */
+        .playhead-slot { height: 12px; display: flex; align-items: center; justify-content: center; }
+        .playhead-slot.active::after { 
+            content: '';
+            width: 8px;
+            height: 8px;
+            background: #fff;
+            border-radius: 50%;
+            box-shadow: 0 0 12px #fff, 0 0 20px var(--accent);
+            display: block;
+        }
+
         .step { height: 24px; border-radius: 2px; cursor: pointer; background: var(--step-off); }
         .step.on { background: var(--step-on); }
         .step.beat-mark { border-left: 2px solid #57606f; }
@@ -38,7 +50,6 @@
         <div class="flex">
             <div id="status-led"></div>
             <button id="pBtn" onclick="engine.toggle()" style="font-weight:bold; width:80px;">START</button>
-            <button onclick="engine.panic()" style="color:var(--danger)">PANIC</button>
             <button id="modeBtn" onclick="ui.toggleMode()" style="background:#8e44ad;">MODE: PATTERN</button>
             <div class="data-font">BPM <input type="number" id="bpm" value="120" style="width:50px; background:#000; color:var(--text); border:1px solid #333" onchange="engine.bpm = this.value"></div>
         </div>
@@ -52,9 +63,7 @@
             <button id="tMix" onclick="ui.tab('mix')">MIXER</button>
         </div>
     </div>
-
     <div id="transport-display" class="data-font" style="text-align:center; color:#fff; background:#000; padding:8px; margin-bottom:10px;">BAR: 01 | PAT: 01 | STEP: 01</div>
-
     <div id="page-seq">
         <div class="panel flex" id="bank-nav"></div>
         <div id="track-rack" class="panel">
@@ -80,7 +89,6 @@
             </div>
         </div>
     </div>
-
     <div id="page-mix" style="display:none">
         <div id="mixer-rack" class="mixer-rack"></div>
     </div>
@@ -143,20 +151,14 @@ const engine = {
         this.tracks.forEach(tr => {
             if (tr.buffer && tr.patterns[b][s]) {
                 const channel = this.mixer[tr.bus];
-                
-                // 1. Trigger FX Envelopes
-                channel.fx.forEach(plugin => {
-                    if (plugin.trigger) plugin.trigger(t); 
-                });
+                channel.fx.forEach(plugin => { if (plugin.trigger) plugin.trigger(t); });
 
-                // 2. Mono-Trigger (De-click old source)
                 if (tr.activeSource && tr.gainNode) {
                     tr.gainNode.gain.cancelAndHoldAtTime(t);
                     tr.gainNode.gain.exponentialRampToValueAtTime(0.0001, t + 0.005);
                     tr.activeSource.stop(t + 0.005);
                 }
 
-                // 3. New Source
                 const src = this.ctx.createBufferSource();
                 const g = this.ctx.createGain();
                 src.buffer = tr.buffer;
@@ -183,12 +185,6 @@ const engine = {
         });
         ui.render(); 
         ui.updateTransport(0, ui.mode === 'song' ? this.song[0] : this.bank);
-    },
-
-    panic() {
-        this.stopAll();
-        this.playing = false;
-        document.getElementById('pBtn').innerText = "START";
     },
 
     rebuildChain(chIdx) {
@@ -346,34 +342,64 @@ const ui = {
         });
     }
 };
+
 const io = {
+    bufferToWav(buffer) {
+        const numOfChan = buffer.numberOfChannels,
+            length = buffer.length * numOfChan * 2 + 44,
+            bufferArray = new ArrayBuffer(length),
+            view = new DataView(bufferArray);
+        let pos = 0, offset = 0;
+        const setUint32 = (d) => { view.setUint32(pos, d, true); pos += 4; };
+        const setUint16 = (d) => { view.setUint16(pos, d, true); pos += 2; };
+        setUint32(0x46464952); setUint32(length - 8); setUint32(0x45564157);
+        setUint32(0x20746d66); setUint32(16); setUint16(1); setUint16(numOfChan);
+        setUint32(buffer.sampleRate); setUint32(buffer.sampleRate * 2 * numOfChan);
+        setUint16(numOfChan * 2); setUint16(16); setUint32(0x61746264); setUint32(length - pos - 4);
+        const channels = [];
+        for (let i = 0; i < numOfChan; i++) channels.push(buffer.getChannelData(i));
+        while (pos < length) {
+            for (let i = 0; i < numOfChan; i++) {
+                let sample = Math.max(-1, Math.min(1, channels[i][offset]));
+                sample = (sample < 0 ? sample * 0x8000 : sample * 0x7FFF);
+                view.setInt16(pos, sample, true); pos += 2;
+            }
+            offset++;
+        }
+        return new Blob([bufferArray], {type: "audio/wav"});
+    },
     async exportSession() {
         const zip = new JSZip();
-        const data = {
-            bpm: engine.bpm, bankLengths: engine.bankLengths, song: engine.song,
-            tracks: engine.tracks.map(t => ({ id: t.id, bus: t.bus, patterns: t.patterns, fileName: t.fileName })),
-            mixer: engine.mixer.map(m => ({ gain: m.output.gain.value, fxCodes: m.fx.map(f => f._sourceCode) }))
-        };
-        zip.file("project.json", JSON.stringify(data));
+        const samplesFolder = zip.folder("samples");
+        const trackData = await Promise.all(engine.tracks.map(async (t, i) => {
+            if (t.buffer) samplesFolder.file(`track_${i}.wav`, this.bufferToWav(t.buffer));
+            return { id: t.id, bus: t.bus, patterns: t.patterns, fileName: t.fileName, samplePath: t.buffer ? `samples/track_${i}.wav` : null };
+        }));
+        const mixerData = engine.mixer.map(m => ({ gain: m.output.gain.value, fxCodes: m.fx.map(f => f._sourceCode) }));
+        zip.file("project.json", JSON.stringify({ bpm: engine.bpm, bankLengths: engine.bankLengths, song: engine.song, tracks: trackData, mixer: mixerData }));
         const blob = await zip.generateAsync({type:"blob"});
-        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = "session.daw"; a.click();
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `session_${Date.now()}.daw`; a.click();
     },
     async importSession(el) {
         if(!el.files[0]) return;
+        engine.initChannels();
         const zip = await JSZip.loadAsync(el.files[0]);
-        const data = JSON.parse(await zip.file("project.json").async("string"));
-        engine.bpm = data.bpm; engine.bankLengths = data.bankLengths; engine.song = data.song;
-        engine.tracks = data.tracks.map(t => ({ ...t, buffer: null }));
-        engine.mixer.forEach(async (m, i) => {
-            m.output.gain.value = data.mixer[i].gain;
-            m.fx = [];
-            if(data.mixer[i].fxCodes) {
-                for(const code of data.mixer[i].fxCodes) await engine.injectFX(i, null, code);
-            }
-        });
+        const project = JSON.parse(await zip.file("project.json").async("string"));
+        engine.bpm = project.bpm; engine.bankLengths = project.bankLengths; engine.song = project.song;
+        engine.tracks = await Promise.all(project.tracks.map(async t => {
+            let buffer = null;
+            if (t.samplePath) buffer = await engine.ctx.decodeAudioData(await zip.file(t.samplePath).async("arraybuffer"));
+            return { ...t, buffer };
+        }));
+        for (let i = 0; i < project.mixer.length; i++) {
+            engine.mixer[i].output.gain.value = project.mixer[i].gain;
+            engine.mixer[i].fx = [];
+            if(project.mixer[i].fxCodes) for(const code of project.mixer[i].fxCodes) await engine.injectFX(i, null, code);
+        }
         ui.render();
     }
 };
+
 engine.addTrack();
 ui.render();
 </script>
