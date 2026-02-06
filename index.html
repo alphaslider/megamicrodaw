@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MEGAMICRODAW // v4.3.2_RECOVERY</title>
+    <title>MEGAMICRODAW // v4.3.3_STABLE</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
         :root { 
@@ -129,6 +129,7 @@ const engine = {
                 this.step = 0;
                 if (ui.mode === 'song') {
                     this.songIdx = (this.songIdx + 1) % this.song.length;
+                    requestAnimationFrame(() => ui.renderSong());
                 }
             }
         }
@@ -140,7 +141,7 @@ const engine = {
             if (tr.buffer && tr.patterns[b][s]) {
                 const channel = this.mixer[tr.bus];
                 
-                // [Mono Trigger Rule] Kill old source immediately
+                // [Mono Trigger Logic] No Overlap
                 if (tr.activeSource) {
                     try { tr.activeSource.stop(t); } catch(e){}
                 }
@@ -225,6 +226,10 @@ const engine = {
         });
         ui.render();
     },
+    
+    addSongCell() { this.song.push(0); ui.render(); },
+    removeSongCell() { if(this.song.length > 1) { this.song.pop(); ui.render(); } },
+    
     updateBankLength(dir) {
         let val = this.bankLengths[this.bank] + (dir * 4);
         this.bankLengths[this.bank] = Math.max(4, Math.min(32, val));
@@ -299,7 +304,7 @@ const ui = {
         tr.fileName = file.name.substring(0, 10);
         const arrayBuffer = await file.arrayBuffer();
         tr.buffer = await engine.ctx.decodeAudioData(arrayBuffer.slice(0));
-        tr._raw = arrayBuffer; // Cache raw binary for export
+        tr._raw = arrayBuffer; 
         ui.render();
     },
     updateTransport(s, b) {
@@ -308,6 +313,8 @@ const ui = {
             Array.from(ph.children).forEach(c => c.classList.remove('active'));
             ph.children[s].classList.add('active');
         }
+        const disp = document.getElementById('transport-display');
+        if(disp) disp.innerText = `BAR: ${String(engine.songIdx+1).padStart(2,'0')} | PAT: ${String(b+1).padStart(2,'0')} | STEP: ${String(s+1).padStart(2,'0')}`;
     },
     renderBanks() {
         const nav = document.getElementById('bank-nav'); if(!nav) return;
@@ -325,7 +332,10 @@ const ui = {
         container.innerHTML = '';
         engine.song.forEach((bank, idx) => {
             const cell = document.createElement('button'); cell.innerText = bank + 1;
-            if(this.mode === 'song' && engine.songIdx === idx) cell.style.borderColor = "#fff";
+            if(this.mode === 'song' && engine.songIdx === idx) {
+                cell.style.background = "var(--accent)";
+                cell.style.borderColor = "#fff";
+            }
             cell.onclick = () => { engine.song[idx] = (engine.song[idx] + 1) % 8; ui.renderSong(); };
             container.appendChild(cell);
         });
@@ -350,9 +360,7 @@ const io = {
         
         zip.file("project.json", JSON.stringify(project));
         const sampleFolder = zip.folder("samples");
-        engine.tracks.forEach(t => {
-            if(t._raw) sampleFolder.file(`${t.id}.bin`, t._raw);
-        });
+        engine.tracks.forEach(t => { if(t._raw) sampleFolder.file(`${t.id}.bin`, t._raw); });
 
         const blob = await zip.generateAsync({type:"blob"});
         const a = document.createElement('a');
@@ -378,8 +386,7 @@ const io = {
         
         const newTracks = [];
         for(const t of project.tracks) {
-            let buffer = null;
-            let raw = null;
+            let buffer = null; let raw = null;
             const sampleFile = zip.file(`samples/${t.id}.bin`);
             if(sampleFile) {
                 raw = await sampleFile.async("arraybuffer");
@@ -394,9 +401,7 @@ const io = {
                 engine.mixer[i].output.gain.value = project.mixer[i].gain;
                 engine.mixer[i].fx = [];
                 if(project.mixer[i].fxCodes) {
-                    for(const code of project.mixer[i].fxCodes) {
-                        await engine.injectFX(i, null, code);
-                    }
+                    for(const code of project.mixer[i].fxCodes) { await engine.injectFX(i, null, code); }
                 }
             }
             engine.rebuildChain(i);
@@ -404,7 +409,6 @@ const io = {
         
         ui.mode = 'pattern';
         ui.render();
-        // Double-render forces DOM update
         setTimeout(() => ui.render(), 50);
     }
 };
