@@ -2,7 +2,14 @@ export default class VinylSim404 {
     constructor(ctx) {
         this.ctx = ctx;
         this.input = ctx.createGain();
+        this.output = ctx.createGain();
         
+        // STATE TRACKING
+        this.wowVal = 0;
+        this.dirtVal = 0;
+        this.compVal = -35;
+        this.bitsVal = 12;
+
         // 1. PRECISION WARP ENGINE (Max 1.5ms)
         this.vibrato = ctx.createDelay(0.1); 
         this.vibrato.delayTime.value = 0.01;
@@ -13,7 +20,7 @@ export default class VinylSim404 {
         this.flutterLFO.frequency.value = 4.2;
         
         this.wowGain = ctx.createGain();
-        this.wowGain.gain.value = 0; 
+        this.wowGain.gain.value = this.wowVal; 
         
         this.wowLFO.connect(this.wowGain);
         this.flutterLFO.connect(this.wowGain);
@@ -24,7 +31,7 @@ export default class VinylSim404 {
 
         // 2. DIRT ENGINE (Hiss & Crackle)
         this.noiseBus = ctx.createGain();
-        this.noiseBus.gain.value = 0;
+        this.noiseBus.gain.value = this.dirtVal;
 
         this.hissSource = ctx.createBufferSource();
         const bufferSize = ctx.sampleRate * 2;
@@ -54,15 +61,13 @@ export default class VinylSim404 {
 
         // 3. THE PUMP & BIT CRUSH
         this.compressor = ctx.createDynamicsCompressor();
-        this.compressor.threshold.value = -35;
+        this.compressor.threshold.value = this.compVal;
         this.compressor.ratio.value = 12;
         this.compressor.attack.value = 0.003;
         this.compressor.release.value = 0.25;
 
         this.bitcrusher = ctx.createWaveShaper();
-        this.updateCrush(12);
-
-        this.output = ctx.createGain();
+        this.updateCrush(this.bitsVal);
 
         // ROUTING
         this.input.connect(this.vibrato);
@@ -72,7 +77,37 @@ export default class VinylSim404 {
         this.noiseBus.connect(this.output);
     }
 
+    // --- 1. STATE SAVER ---
+    getState() {
+        return {
+            wow: this.wowVal,
+            dirt: this.dirtVal,
+            comp: this.compVal,
+            bits: this.bitsVal
+        };
+    }
+
+    // --- 2. STATE LOADER ---
+    setState(data) {
+        if (data.wow !== undefined) {
+            this.wowVal = data.wow;
+            this.wowGain.gain.value = this.wowVal;
+        }
+        if (data.dirt !== undefined) {
+            this.dirtVal = data.dirt;
+            this.noiseBus.gain.value = this.dirtVal;
+        }
+        if (data.comp !== undefined) {
+            this.compVal = data.comp;
+            this.compressor.threshold.value = this.compVal;
+        }
+        if (data.bits !== undefined) {
+            this.updateCrush(data.bits);
+        }
+    }
+
     updateCrush(bits) {
+        this.bitsVal = bits;
         const size = 4096;
         const curve = new Float32Array(size);
         const step = Math.pow(2, bits);
@@ -95,37 +130,53 @@ export default class VinylSim404 {
         } catch(e) { 
             // Already stopped or disconnected
         }
+        this.input.disconnect();
+        this.output.disconnect();
     }
 
     renderUI(container, onRemove) {
         container.innerHTML = `
-            <div style="padding:10px; background:#1a1a1a; color:#fbc531; font-family:monospace; font-size:9px; border:1px solid #444;">
-                <div style="margin-bottom:8px; color:#fff; border-bottom:1px solid #444; padding-bottom:3px;">MFX_404_VINYL</div>
+            <div style="padding:10px; background:#1a1a1a; color:#fbc531; font-family:monospace; font-size:9px; border:1px solid #444; border-radius:4px;">
+                <div style="margin-bottom:8px; color:#fff; border-bottom:1px solid #444; padding-bottom:3px; font-weight:bold;">MFX_404_VINYL</div>
                 
                 <label>WARP (PITCH)</label>
-                <input type="range" id="wow" min="0" max="0.0015" step="0.00001" value="0" style="width:100%">
+                <input type="range" id="wow" min="0" max="0.0015" step="0.00001" value="${this.wowVal}" style="width:100%">
                 
                 <label style="margin-top:8px; display:block;">DIRT (HISS/POP)</label>
-                <input type="range" id="dirt" min="0" max="0.4" step="0.01" value="0" style="width:100%">
+                <input type="range" id="dirt" min="0" max="0.4" step="0.01" value="${this.dirtVal}" style="width:100%">
 
                 <label style="margin-top:8px; display:block;">PUMP (COMP)</label>
-                <input type="range" id="comp" min="-60" max="0" value="-35" style="width:100%">
+                <input type="range" id="comp" min="-60" max="0" value="${this.compVal}" style="width:100%">
                 
                 <label style="margin-top:8px; display:block;">BIT DEPTH</label>
-                <input type="range" id="bits" min="6" max="16" step="1" value="12" style="width:100%">
+                <input type="range" id="bits" min="6" max="16" step="1" value="${this.bitsVal}" style="width:100%">
 
-                <button id="close" style="margin-top:12px; width:100%; background:#c0392b; color:#fff; border:none; cursor:pointer; font-size:8px; padding:4px;">PURGE PLUGIN</button>
+                <button id="close" style="margin-top:12px; width:100%; background:#c0392b; color:#fff; border:none; cursor:pointer; font-size:8px; padding:4px; border-radius:2px;">PURGE PLUGIN</button>
             </div>
         `;
 
-        container.querySelector('#wow').oninput = (e) => { this.wowGain.gain.value = e.target.value; };
-        container.querySelector('#dirt').oninput = (e) => { this.noiseBus.gain.value = e.target.value; };
-        container.querySelector('#comp').oninput = (e) => { this.compressor.threshold.value = e.target.value; };
-        container.querySelector('#bits').oninput = (e) => { this.updateCrush(e.target.value); };
+        container.querySelector('#wow').oninput = (e) => { 
+            this.wowVal = parseFloat(e.target.value);
+            this.wowGain.gain.value = this.wowVal; 
+        };
+        
+        container.querySelector('#dirt').oninput = (e) => { 
+            this.dirtVal = parseFloat(e.target.value);
+            this.noiseBus.gain.value = this.dirtVal; 
+        };
+        
+        container.querySelector('#comp').oninput = (e) => { 
+            this.compVal = parseFloat(e.target.value);
+            this.compressor.threshold.value = this.compVal; 
+        };
+        
+        container.querySelector('#bits').oninput = (e) => { 
+            this.updateCrush(parseFloat(e.target.value)); 
+        };
         
         container.querySelector('#close').onclick = () => {
-            this.cleanup(); // Stops the audio context nodes immediately
-            onRemove();     // Removes the UI element
+            this.cleanup(); 
+            onRemove();     
         };
     }
 }
