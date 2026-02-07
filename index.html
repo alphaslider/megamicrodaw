@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MEGAMICRODAW // v5.0_UNIFIED_UI</title>
+    <title>MEGAMICRODAW // v6.0_FINAL_INTEGRATED</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
         :root { 
-            --bg: #0f1115; 
-            --panel: #16191f; 
-            --surface: #21252b;
+            --bg: #121418; 
+            --panel: #1b1e26; 
+            --surface: #232730;
             --text: #aab2c0; 
             --accent: #3498db; 
             --accent-glow: rgba(52, 152, 219, 0.4);
@@ -21,170 +21,139 @@
             --btn-grad-bot: #2c313a;
         }
 
-        body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', Roboto, sans-serif; text-transform: uppercase; padding: 20px; margin: 0; user-select: none; }
+        /* FULL SCREEN SETUP */
+        html, body { 
+            height: 100%; overflow: hidden; background: #000; 
+            color: var(--text); font-family: 'Segoe UI', Roboto, sans-serif; 
+            text-transform: uppercase; margin: 0; padding: 0; user-select: none; 
+        }
         
         #chassis { 
-            border: 1px solid #000; 
-            padding: 15px; 
-            background: var(--panel); 
-            max-width: 1400px; 
-            margin: 0 auto; 
-            box-shadow: 0 20px 50px rgba(0,0,0,0.9), inset 0 1px 0 rgba(255,255,255,0.05); 
-            border-radius: 6px;
+            display: flex; flex-direction: column; height: 100vh; width: 100vw;
+            background: var(--bg); padding: 10px; box-sizing: border-box; gap: 10px;
         }
 
         .panel { 
-            border: 1px solid #000; 
-            padding: 12px; 
-            margin-bottom: 10px; 
-            background: var(--surface); 
-            border-radius: 4px; 
-            box-shadow: inset 0 0 10px rgba(0,0,0,0.3);
+            border: 1px solid #000; background: var(--panel); border-radius: 4px; 
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.3); flex-shrink: 0; 
+        }
+        
+        /* TOP CONTROL BAR */
+        #top-bar { padding: 10px; display: flex; justify-content: space-between; align-items: center; }
+
+        /* MAIN SEQ AREA */
+        #page-seq { display: flex; flex-direction: column; flex-grow: 1; min-height: 0; gap: 10px; }
+        #bank-nav { padding: 8px; display: flex; gap: 5px; }
+
+        /* TRACK RACK CONTAINER */
+        #track-rack-container {
+            display: flex; flex-direction: column; flex-grow: 1; min-height: 0;
+            background: var(--surface); border: 1px solid #000; border-radius: 4px;
         }
 
-        .flex { display: flex; gap: 10px; align-items: center; }
-        .flex-wrap { flex-wrap: wrap; }
+        /* TOOLBAR (Controls Only) */
+        #track-toolbar {
+            padding: 8px 10px;
+            background: #1e222b;
+            border-bottom: 1px solid #000;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* TIMELINE HEADER (Grid Synced) */
+        #timeline-header {
+            display: grid; 
+            grid-template-columns: 100px 1fr 80px 30px; 
+            gap: 8px;
+            padding: 5px;
+            padding-bottom: 10px;
+            background: #1e222b;
+            border-bottom: 1px solid #333;
+            align-items: end; 
+        }
+
+        /* TRACK ROWS */
+        .track-row { 
+            display: grid; 
+            grid-template-columns: 100px 1fr 80px 30px; 
+            gap: 8px; 
+            margin-bottom: 4px; 
+            align-items: center; 
+            background: #181b21; 
+            padding: 5px; 
+            border-radius: 3px; 
+            border: 1px solid #000;
+        }
+
+        /* SCROLL AREA */
+        #tracks-scroll-area { flex-grow: 1; overflow-y: auto; padding: 10px; }
+        #tracks-scroll-area::-webkit-scrollbar { width: 10px; }
+        #tracks-scroll-area::-webkit-scrollbar-track { background: #111; }
+        #tracks-scroll-area::-webkit-scrollbar-thumb { background: #444; border-radius: 5px; border: 2px solid #111; }
+
+        /* GRIDS & STEPS */
+        .step-grid { display: grid; grid-template-columns: repeat(32, 1fr); gap: 2px; width: 100%; height: 100%; }
         
-        /* Control Groups */
+        .step { height: 24px; border-radius: 2px; cursor: pointer; background: var(--step-off); transition: background 0.1s; }
+        .step.on { background: var(--step-on); box-shadow: 0 0 8px var(--accent-glow); }
+        .step.beat-mark { border-left: 1px solid #555; }
+
+        /* GLOWING DOT PLAYHEAD */
+        .playhead-slot { 
+            width: 6px; height: 6px; background: #333; border-radius: 50%; margin: auto; transition: all 0.05s;
+        }
+        .playhead-slot.active { 
+            background: var(--playhead-color); 
+            box-shadow: 0 0 8px var(--playhead-color), 0 0 15px var(--playhead-color); 
+            transform: scale(1.5); 
+        }
+
+        /* SONG ARRANGER */
+        #song-arranger-panel { padding: 10px; flex-shrink: 0; background: var(--panel); }
+        #song-arranger-box { background:#111; padding:8px; margin-top:5px; overflow-x:auto; border-radius: 3px; display: flex; gap: 5px; align-items: center; }
+        #song-cells button { width: 30px; padding: 5px 0; }
+
+        /* MIXER */
+        #page-mix { flex-grow: 1; display: none; flex-direction: column; min-height: 0; }
+        .mixer-rack { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; flex-grow: 1; padding: 10px; background: #111; border: 1px solid #000; border-radius: 4px; }
+        .mixer-strip { border: 1px solid #333; padding: 10px; background: #1a1d23; border-radius: 4px; display: flex; flex-direction: column; }
+        .fx-stack { flex-grow: 1; margin: 10px 0; border: 1px inset #000; background: #0d0f12; padding: 5px; overflow-y: auto; }
+
+        /* UTILS */
+        .flex { display: flex; gap: 10px; align-items: center; }
         .ctrl-group { border-right: 1px solid #333; padding-right: 15px; margin-right: 5px; display: flex; align-items: center; gap: 15px; }
         .ctrl-group:last-child { border: none; }
-        
-        /* EXPANDED SLIDER BOXES */
-        .mini-slider-box { display: flex; flex-direction: column; width: 110px; position: relative; top: -2px; }
+        .mini-slider-box { display: flex; flex-direction: column; width: 100px; position: relative; top: -2px; }
         .mini-slider-box label { font-size: 9px; color: #666; margin-bottom: 4px; letter-spacing: 1px; font-weight: 600; }
-
-        /* CUSTOM SLIDER STYLING */
         input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; cursor: pointer; margin: 0; }
         input[type=range]:focus { outline: none; }
         input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; background: #000; border-radius: 2px; border-bottom: 1px solid #333; }
         input[type=range]::-moz-range-track { width: 100%; height: 4px; background: #000; border-radius: 2px; }
-        input[type=range]::-webkit-slider-thumb { 
-            -webkit-appearance: none; height: 12px; width: 12px; border-radius: 50%; 
-            background: #ccc; margin-top: -4px; box-shadow: 0 2px 5px rgba(0,0,0,0.5); 
-        }
-
-        /* ----- UNIFIED PREMIUM BUTTONS ----- */
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 12px; width: 12px; border-radius: 50%; background: #ccc; margin-top: -4px; box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
         button { 
             background: linear-gradient(to bottom, var(--btn-grad-top), var(--btn-grad-bot));
-            color: #fff; 
-            border: 1px solid #111; 
-            border-top: 1px solid #4a5160;
-            cursor: pointer; 
-            padding: 8px 14px; 
-            font-size: 10px; 
-            font-weight: 600;
-            border-radius: 3px; 
-            text-shadow: 0 1px 2px rgba(0,0,0,0.8);
-            box-shadow: 0 2px 4px rgba(0,0,0,0.4);
-            transition: all 0.1s ease;
-            letter-spacing: 0.5px;
+            color: #fff; border: 1px solid #111; border-top: 1px solid #4a5160;
+            cursor: pointer; padding: 8px 14px; font-size: 10px; font-weight: 600;
+            border-radius: 3px; text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.4); transition: all 0.1s ease; letter-spacing: 0.5px;
         }
-        
-        button:hover { 
-            background: linear-gradient(to bottom, #454d5a, #363d48);
-            color: #fff;
-            transform: translateY(-1px);
-        }
-        
-        button:active { 
-            transform: translateY(1px);
-            background: #222;
-            box-shadow: inset 0 2px 5px rgba(0,0,0,0.5);
-            border-top: 1px solid #111;
-        }
-
-        button.active { 
-            background: var(--accent) !important; 
-            border-color: #2980b9 !important; 
-            box-shadow: 0 0 15px var(--accent-glow), inset 0 1px 0 rgba(255,255,255,0.3); 
-            text-shadow: none;
-        }
-        
-        button.armed { background: var(--rec) !important; color: #fff; animation: flash 2s infinite; }
-        button.recording { background: var(--rec) !important; color: #fff; box-shadow: 0 0 15px var(--rec); border:1px solid #fff !important; }
+        button:hover { background: linear-gradient(to bottom, #454d5a, #363d48); transform: translateY(-1px); }
+        button:active { transform: translateY(1px); background: #222; border-top: 1px solid #111; }
+        button.active { background: var(--accent) !important; border-color: #2980b9 !important; box-shadow: 0 0 15px var(--accent-glow); text-shadow: none; }
+        button.recording { background: var(--rec) !important; box-shadow: 0 0 15px var(--rec); border:1px solid #fff !important; }
+        button.armed { background: var(--rec) !important; animation: flash 2s infinite; }
         @keyframes flash { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
-        
-        /* GRID LAYOUTS */
-        .track-row { 
-            display: grid; 
-            grid-template-columns: 120px 1fr 90px 40px; 
-            gap: 10px; 
-            margin-bottom: 5px; 
-            align-items: center; 
-            background: #1d2127; 
-            padding: 6px; 
-            border-radius: 4px; 
-            border: 1px solid #000;
-        }
-        
-        .step-grid { display: grid; grid-template-columns: repeat(32, 1fr); gap: 2px; width: 100%; }
-        
-        .playhead-slot { height: 4px; width: 4px; background: #333; border-radius: 50%; margin: 0 auto; transition: all 0.05s; }
-        .playhead-slot.active { background: var(--playhead-color); box-shadow: 0 0 8px var(--playhead-color); transform: scale(1.5); }
-
-        .step { height: 26px; border-radius: 2px; cursor: pointer; background: var(--step-off); transition: background 0.1s; }
-        .step.on { background: var(--step-on); box-shadow: 0 0 10px var(--accent-glow); }
-        .step.beat-mark { border-left: 1px solid #555; }
-
-        /* ----- EVEN MIXER LAYOUT ----- */
-        .mixer-rack { 
-            display: grid; /* Changed from Flex to Grid for perfect even distribution */
-            grid-template-columns: repeat(8, 1fr); /* 8 Equal columns */
-            gap: 8px; 
-            min-height: 400px; 
-            padding: 10px; 
-            background: #111; 
-            border: 1px solid #000; 
-            border-radius: 4px;
-        }
-        
-        .mixer-strip { 
-            width: auto; /* Remove fixed width to allow grid stretching */
-            border: 1px solid #333; 
-            padding: 10px; 
-            background: #1a1d23; 
-            border-radius: 4px; 
-            display: flex; 
-            flex-direction: column;
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
-        }
-        
-        .fx-stack { 
-            flex-grow: 1; 
-            margin: 10px 0; 
-            border: 1px inset #000; 
-            background: #0d0f12; 
-            padding: 5px; 
-            min-height: 150px; 
-            overflow-y: auto; 
-            border-radius: 2px;
-        }
-        
         .data-font { font-size: 10px; letter-spacing: 1px; color: #666; font-family: monospace; font-weight: bold; }
-        
         #status-led { width: 8px; height: 8px; border-radius: 50%; background: #333; box-shadow: inset 0 1px 2px rgba(0,0,0,0.5); }
         #status-led.online { background: #2ecc71; box-shadow: 0 0 8px #2ecc71; }
-        
-        .rec-panel { display:flex; gap:10px; align-items:center; }
-        audio { height: 20px; width: 150px; }
-
-        /* Remove default blue outline on focus for cleanliness */
         *:focus { outline: none; }
-        
-        /* Select styling to match buttons */
-        select {
-            background: #16191f;
-            color: #ccc;
-            border: 1px solid #000;
-            padding: 4px;
-            border-radius: 3px;
-        }
+        select { background: #16191f; color: #ccc; border: 1px solid #000; padding: 4px; border-radius: 3px; width: 100%; }
     </style>
 </head>
 <body>
 <div id="chassis">
-    <div class="panel flex flex-wrap" style="justify-content: space-between; align-items: center;">
-        
+    <div id="top-bar" class="panel">
         <div class="ctrl-group">
             <div id="status-led"></div>
             <button id="pBtn" onclick="engine.toggle()" style="width:60px;">START</button>
@@ -194,26 +163,21 @@
                 <label>BPM: <span id="bpm-val" style="color:#ccc">120</span></label>
                 <input type="range" min="60" max="200" value="120" oninput="engine.bpm=this.value; document.getElementById('bpm-val').innerText=this.value">
             </div>
-
             <div class="mini-slider-box">
                 <label>SWING</label>
                 <input type="range" min="0" max="0.3" step="0.01" value="0" oninput="engine.swing=this.value">
             </div>
-
             <div class="mini-slider-box">
                 <label>MASTER</label>
                 <input type="range" min="0" max="1.5" step="0.01" value="1" oninput="engine.setMaster(this.value)">
             </div>
         </div>
-
-        <div class="ctrl-group rec-panel">
+        <div class="ctrl-group" style="display:flex; gap:10px; align-items:center;">
             <button id="armBtn" onclick="recorder.toggleArm()">ARM REC</button>
-            <div id="rec-ui-hidden" style="display:none" class="flex">
-                <audio id="rec-preview" controls></audio>
-                <a id="rec-dl" download="resample.webm"><button>SAVE</button></a>
+            <div id="rec-ui-hidden" style="display:none; gap:10px; align-items:center;">
+                <a id="rec-dl" download="master_record.wav"><button>SAVE WAV</button></a>
             </div>
         </div>
-
         <div class="flex">
             <button onclick="io.exportSession()">EXP</button>
             <button onclick="document.getElementById('importInput').click()">IMP</button>
@@ -224,9 +188,10 @@
     </div>
 
     <div id="page-seq">
-        <div class="panel flex" id="bank-nav"></div>
-        <div id="track-rack" class="panel">
-            <div class="flex" style="margin-bottom:15px; justify-content: space-between;">
+        <div id="bank-nav" class="panel"></div>
+
+        <div id="track-rack-container">
+            <div id="track-toolbar">
                 <button onclick="engine.addTrack()">+ TRACK</button>
                 <div class="flex" style="background: #111; border-radius: 3px; padding: 2px 5px; border:1px solid #000;">
                     <button onclick="engine.updateBankLength(-1)" style="padding: 2px 8px; height: 20px;">&lt;</button>
@@ -234,29 +199,93 @@
                     <button onclick="engine.updateBankLength(1)" style="padding: 2px 8px; height: 20px;">&gt;</button>
                 </div>
             </div>
-            <div style="display: grid; grid-template-columns: 120px 1fr 90px 40px; gap: 10px; margin-bottom:5px;">
-                <div></div><div id="playhead-grid" class="step-grid"></div><div></div><div></div>
+
+            <div id="timeline-header">
+                <div></div>
+                <div id="playhead-grid" class="step-grid"></div>
+                <div></div>
+                <div></div>
             </div>
-            <div id="tracks-list"></div>
+
+            <div id="tracks-scroll-area">
+                <div id="tracks-list"></div>
+            </div>
         </div>
-        <div class="panel">
+
+        <div id="song-arranger-panel" class="panel">
             <div class="data-font">SONG_ARRANGER</div>
-            <div id="song-arranger-box" class="flex" style="background:#111; padding:10px; margin-top:5px; overflow-x:auto; border-radius: 3px;">
+            <div id="song-arranger-box">
                 <button onclick="engine.addSongCell()">+ ADD</button>
                 <button onclick="engine.removeSongCell()">- REM</button>
-                <div id="song-cells" class="flex" style="margin-left:15px"></div>
+                <div style="width:1px; height:20px; background:#333; margin:0 10px;"></div>
+                <div id="song-cells"></div>
             </div>
         </div>
     </div>
 
-    <div id="page-mix" style="display:none">
+    <div id="page-mix">
         <div id="mixer-rack" class="mixer-rack"></div>
     </div>
 </div>
 
 <script>
+// --- AUDIO UTILITIES (WAV ENCODING) ---
+const audioUtils = {
+    bufferToWav(buffer) {
+        const numChannels = buffer.numberOfChannels;
+        const sampleRate = buffer.sampleRate;
+        
+        let result;
+        if (numChannels === 2) {
+            result = this.interleave(buffer.getChannelData(0), buffer.getChannelData(1));
+        } else {
+            result = buffer.getChannelData(0);
+        }
+
+        return this.encodeWAV(result, numChannels, sampleRate);
+    },
+    interleave(l, r) {
+        let len = l.length + r.length;
+        let res = new Float32Array(len);
+        let x = 0;
+        for (let i = 0; i < l.length; i++) { res[x++] = l[i]; res[x++] = r[i]; }
+        return res;
+    },
+    encodeWAV(samples, numChannels, sampleRate) {
+        const buffer = new ArrayBuffer(44 + samples.length * 2);
+        const view = new DataView(buffer);
+        const writeString = (view, offset, string) => {
+            for (let i = 0; i < string.length; i++) view.setUint8(offset + i, string.charCodeAt(i));
+        };
+
+        writeString(view, 0, 'RIFF');
+        view.setUint32(4, 36 + samples.length * 2, true);
+        writeString(view, 8, 'WAVE');
+        writeString(view, 12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, numChannels, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * numChannels * 2, true);
+        view.setUint16(32, numChannels * 2, true);
+        view.setUint16(34, 16, true);
+        writeString(view, 36, 'data');
+        view.setUint32(40, samples.length * 2, true);
+
+        let offset = 44;
+        for (let i = 0; i < samples.length; i++) {
+            let s = Math.max(-1, Math.min(1, samples[i]));
+            s = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            view.setInt16(offset, s, true);
+            offset += 2;
+        }
+        return new Blob([view], { type: 'audio/wav' });
+    }
+};
+
+// --- RECORDER ---
 const recorder = {
-    mediaRecorder: null, chunks: [], armed: false, recording: false, streamNode: null,
+    recording: false, armed: false, processor: null, left: [], right: [],
     toggleArm() {
         this.armed = !this.armed;
         const btn = document.getElementById('armBtn');
@@ -269,33 +298,44 @@ const recorder = {
     },
     start() {
         if(!this.armed) return;
-        this.chunks = [];
-        if (!this.streamNode) {
-            this.streamNode = engine.ctx.createMediaStreamDestination();
-            engine.master.connect(this.streamNode);
-        }
-        try { this.mediaRecorder = new MediaRecorder(this.streamNode.stream); } 
-        catch(e) { alert("Rec Error: Browser not supported."); return; }
-        this.mediaRecorder.ondataavailable = e => this.chunks.push(e.data);
-        this.mediaRecorder.onstop = () => this.finish();
-        this.mediaRecorder.start();
+        this.left = []; this.right = [];
+        this.processor = engine.ctx.createScriptProcessor(4096, 2, 2);
+        this.processor.connect(engine.ctx.destination);
+        engine.master.connect(this.processor);
+        this.processor.onaudioprocess = (e) => {
+            if (!this.recording) return;
+            this.left.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+            this.right.push(new Float32Array(e.inputBuffer.getChannelData(1)));
+        };
         this.recording = true;
         const btn = document.getElementById('armBtn');
         btn.classList.remove('armed'); btn.classList.add('recording'); btn.innerText = "REC";
     },
-    stop() { if(this.recording && this.mediaRecorder) { this.mediaRecorder.stop(); this.recording = false; } },
+    stop() {
+        if(this.recording) {
+            this.recording = false;
+            if(this.processor) { this.processor.disconnect(); engine.master.disconnect(this.processor); }
+            this.finish();
+        }
+    },
     finish() {
         const btn = document.getElementById('armBtn');
         btn.classList.remove('recording'); btn.innerText = "ARM REC";
         this.armed = false; 
-        const blob = new Blob(this.chunks, { 'type' : 'audio/webm' });
-        const url = URL.createObjectURL(blob);
-        document.getElementById('rec-preview').src = url;
+        
+        const merge = (b) => { let l=b.reduce((a,c)=>a+c.length,0), r=new Float32Array(l), o=0; b.forEach(c=>{r.set(c,o);o+=c.length}); return r; };
+        const flatL = merge(this.left); 
+        const flatR = merge(this.right);
+        const interleaved = audioUtils.interleave(flatL, flatR);
+        const wavBlob = audioUtils.encodeWAV(interleaved, 2, engine.ctx.sampleRate);
+        
+        const url = URL.createObjectURL(wavBlob);
         document.getElementById('rec-dl').href = url;
         document.getElementById('rec-ui-hidden').style.display = 'flex';
     }
 };
 
+// --- AUDIO ENGINE ---
 const engine = {
     ctx: null, master: null, tracks: [], mixer: [], song: [0],
     bpm: 120, playing: false, step: 0, bank: 0, songIdx: 0, nextTime: 0, timer: null,
@@ -303,26 +343,24 @@ const engine = {
 
     initChannels() {
         if (this.ctx) return;
-        const AudioContext = window.AudioContext || window.webkitAudioContext;
-        this.ctx = new AudioContext();
+        const AC = window.AudioContext || window.webkitAudioContext;
+        this.ctx = new AC();
         this.master = this.ctx.createGain();
         this.master.connect(this.ctx.destination);
         for(let i=0; i<8; i++) {
-            const input = this.ctx.createGain();
-            const output = this.ctx.createGain();
-            input.connect(output); output.connect(this.master);
-            this.mixer.push({ input, output, fx: [] });
+            const inp = this.ctx.createGain(); const out = this.ctx.createGain();
+            inp.connect(out); out.connect(this.master);
+            this.mixer.push({ input: inp, output: out, fx: [] });
         }
     },
-    setMaster(val) { if(this.master) this.master.gain.value = val; },
+    setMaster(v) { if(this.master) this.master.gain.value = v; },
     async toggle() {
         this.initChannels();
         if (this.ctx.state === 'suspended') await this.ctx.resume();
         this.playing = !this.playing;
         if (this.playing) {
             if(recorder.armed) recorder.start();
-            this.nextTime = this.ctx.currentTime;
-            this.scheduler();
+            this.nextTime = this.ctx.currentTime; this.scheduler();
         } else { this.stopAll(); }
         document.getElementById('pBtn').innerText = this.playing ? "STOP" : "START";
         document.getElementById('status-led').className = this.ctx.state === 'running' ? 'online' : '';
@@ -345,28 +383,23 @@ const engine = {
         this.timer = setTimeout(() => this.scheduler(), 25);
     },
     playStep(s, t, b) {
-        const swingOffset = (s % 2 !== 0) ? (this.swing * (60 / this.bpm / 4)) : 0;
-        const time = t + swingOffset;
+        const sw = (s % 2 !== 0) ? (this.swing * (60 / this.bpm / 4)) : 0;
+        const time = t + sw;
         this.tracks.forEach(tr => {
             if (tr.buffer && tr.patterns[b][s]) {
-                const channel = this.mixer[tr.bus];
-                channel.fx.forEach(plugin => { if (plugin.trigger) plugin.trigger(time); });
+                const ch = this.mixer[tr.bus];
+                ch.fx.forEach(f => { if (f.trigger) f.trigger(time); });
                 
-                // MONO TRIGGER LOGIC: Prevent overlap on same track
+                // MONO TRIGGER LOGIC
                 if (tr.activeSource && tr.gainNode) {
                     tr.gainNode.gain.cancelAndHoldAtTime(time);
                     tr.gainNode.gain.exponentialRampToValueAtTime(0.0001, time + 0.005);
                     tr.activeSource.stop(time + 0.005);
                 }
-                
-                const src = this.ctx.createBufferSource();
+                const src = this.ctx.createBufferSource(); src.buffer = tr.buffer;
                 const g = this.ctx.createGain();
-                src.buffer = tr.buffer;
-                src.connect(g);
-                g.connect(channel.input);
-                src.start(time);
-                tr.activeSource = src;
-                tr.gainNode = g;
+                src.connect(g); g.connect(ch.input); src.start(time);
+                tr.activeSource = src; tr.gainNode = g;
             }
         });
         requestAnimationFrame(() => ui.updatePlayhead(s));
@@ -378,36 +411,37 @@ const engine = {
         this.tracks.forEach(t => {
             if(t.activeSource && t.gainNode) {
                 t.gainNode.gain.cancelAndHoldAtTime(this.ctx.currentTime);
-                t.gainNode.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + 0.05);
                 t.activeSource.stop(this.ctx.currentTime + 0.05);
             }
         });
         ui.render(); ui.updatePlayhead(0);
     },
-    rebuildChain(chIdx) {
-        const ch = this.mixer[chIdx];
-        ch.input.disconnect(); ch.fx.forEach(f => { if(f.output) f.output.disconnect(); });
-        let prev = ch.input;
-        if (ch.fx.length > 0) {
-            ch.fx.forEach(f => { if (f.input && f.output) { prev.connect(f.input); prev = f.output; } });
-        }
-        prev.connect(ch.output);
+    rebuildChain(i) {
+        const ch = this.mixer[i]; ch.input.disconnect(); 
+        ch.fx.forEach(f => { if(f.output) f.output.disconnect(); });
+        let p = ch.input;
+        if (ch.fx.length > 0) ch.fx.forEach(f => { if (f.input && f.output) { p.connect(f.input); p = f.output; } });
+        p.connect(ch.output);
     },
-    async injectFX(chIdx, file, codeOverride = null) {
+    async injectFX(chIdx, file, codeOverride = null, state = null) {
         this.initChannels();
         try {
             const code = codeOverride || await file.text();
             const blob = new Blob([code], { type: 'application/javascript' });
             const url = URL.createObjectURL(blob);
             const mod = await import(url + '#' + Date.now());
-            const instance = new (mod.default || Object.values(mod)[0])(this.ctx);
-            instance._sourceCode = code;
-            this.mixer[chIdx].fx.push(instance);
+            const inst = new (mod.default || Object.values(mod)[0])(this.ctx);
+            inst._sourceCode = code;
+            
+            // RESTORE STATE
+            if (state && inst.setState) inst.setState(state);
+            
+            this.mixer[chIdx].fx.push(inst);
             this.rebuildChain(chIdx);
             ui.renderMixer();
-        } catch (err) { console.error("FX Load Error:", err); }
+        } catch (e) { console.error("FX Load Error", e); }
     },
-    removeFX(chIdx, fxIdx) { this.mixer[chIdx].fx.splice(fxIdx, 1); this.rebuildChain(chIdx); ui.renderMixer(); },
+    removeFX(c, f) { this.mixer[c].fx.splice(f, 1); this.rebuildChain(c); ui.renderMixer(); },
     addTrack() {
         this.tracks.push({ 
             id: Date.now()+Math.random(), buffer: null, fileName: "EMPTY", bus: 0, activeSource: null, gainNode: null,
@@ -424,12 +458,13 @@ const engine = {
     }
 };
 
+// --- UI LOGIC ---
 const ui = {
     mode: 'pattern',
     tab(name) {
         engine.initChannels();
-        document.getElementById('page-seq').style.display = name === 'seq' ? 'block' : 'none';
-        document.getElementById('page-mix').style.display = name === 'mix' ? 'block' : 'none';
+        document.getElementById('page-seq').style.display = name === 'seq' ? 'flex' : 'none';
+        document.getElementById('page-mix').style.display = name === 'mix' ? 'flex' : 'none';
         document.getElementById('tSeq').className = name === 'seq' ? 'active' : '';
         document.getElementById('tMix').className = name === 'mix' ? 'active' : '';
         if(name === 'mix') this.renderMixer();
@@ -444,6 +479,7 @@ const ui = {
         const list = document.getElementById('tracks-list'); if(!list) return;
         document.getElementById('bank-len-disp').innerText = `PAT ${b+1} LEN: ${engine.bankLengths[b]}`;
         list.innerHTML = '';
+        
         const ph = document.getElementById('playhead-grid'); ph.innerHTML = '';
         for(let i=0; i<32; i++) ph.innerHTML += `<div class="playhead-slot"></div>`;
         
@@ -455,7 +491,7 @@ const ui = {
                 <select class="data-font" onchange="engine.tracks[${i}].bus=this.value; engine.rebuildChain(this.value)">
                     ${engine.mixer.map((_,m)=>`<option value="${m}" ${t.bus==m?'selected':''}>CH ${m+1}</option>`).join('')}
                 </select>
-                <button onclick="engine.tracks.splice(${i},1);ui.render()">X</button>`;
+                <button onclick="engine.tracks.splice(${i},1);ui.render()" style="color:var(--danger)">X</button>`;
             list.appendChild(row);
             const grid = document.getElementById(`grid-${t.id}`);
             for(let s=0; s<32; s++) {
@@ -488,8 +524,8 @@ const ui = {
         const tr = engine.tracks.find(t => t.id === id);
         const file = el.files[0]; if(!file) return;
         tr.fileName = file.name.substring(0, 10);
-        const arrayBuffer = await file.arrayBuffer();
-        tr.buffer = await engine.ctx.decodeAudioData(arrayBuffer);
+        const ab = await file.arrayBuffer();
+        tr.buffer = await engine.ctx.decodeAudioData(ab);
         ui.render();
     },
     updatePlayhead(s) {
@@ -502,56 +538,157 @@ const ui = {
     renderBanks() {
         const nav = document.getElementById('bank-nav'); if(!nav) return;
         nav.innerHTML = '';
-        const currentActiveBank = (this.mode === 'song') ? engine.song[engine.songIdx] : engine.bank;
+        const cur = (this.mode === 'song') ? engine.song[engine.songIdx] : engine.bank;
         for(let i=0; i<8; i++) {
             const btn = document.createElement('button'); btn.innerText = i+1;
-            btn.className = (currentActiveBank === i) ? 'active' : '';
+            btn.className = (cur === i) ? 'active' : '';
             btn.onclick = () => { this.mode = 'pattern'; engine.bank = i; this.render(); };
             nav.appendChild(btn);
         }
     },
     renderSong() {
-        const container = document.getElementById('song-cells'); if(!container) return; 
-        container.innerHTML = '';
+        const cont = document.getElementById('song-cells'); if(!cont) return; 
+        cont.innerHTML = '';
         engine.song.forEach((bank, idx) => {
             const cell = document.createElement('button'); cell.innerText = bank + 1;
             if(this.mode === 'song' && engine.songIdx === idx) cell.classList.add('active');
             cell.onclick = () => { engine.song[idx] = (engine.song[idx] + 1) % 8; ui.renderSong(); };
-            container.appendChild(cell);
+            cont.appendChild(cell);
         });
     }
 };
+
+// --- ROBUST IO MANAGER ---
 const io = {
     async exportSession() {
+        engine.initChannels();
         const zip = new JSZip();
-        const data = {
-            bpm: engine.bpm, bankLengths: engine.bankLengths, song: engine.song, swing: engine.swing,
-            tracks: engine.tracks.map(t => ({ id: t.id, bus: t.bus, patterns: t.patterns, fileName: t.fileName })),
-            mixer: engine.mixer.map(m => ({ gain: m.output.gain.value, fxCodes: m.fx.map(f => f._sourceCode) }))
-        };
-        zip.file("project.json", JSON.stringify(data));
-        const blob = await zip.generateAsync({type:"blob"});
-        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = "session.daw"; a.click();
-    },
-    async importSession(el) {
-        if(!el.files[0]) return;
-        const zip = await JSZip.loadAsync(el.files[0]);
-        const data = JSON.parse(await zip.file("project.json").async("string"));
-        engine.bpm = data.bpm; engine.bankLengths = data.bankLengths; engine.song = data.song;
-        engine.swing = data.swing || 0;
-        engine.tracks = data.tracks.map(t => ({ ...t, buffer: null }));
-        engine.mixer.forEach(async (m, i) => {
-            m.output.gain.value = data.mixer[i].gain;
-            m.fx = [];
-            if(data.mixer[i].fxCodes) {
-                for(const code of data.mixer[i].fxCodes) await engine.injectFX(i, null, code);
+        const samplesFolder = zip.folder("samples");
+        
+        // 1. Save Patterns & Metadata
+        const tracksMeta = engine.tracks.map(t => {
+            return {
+                id: t.id,
+                bus: t.bus,
+                patterns: t.patterns,
+                fileName: t.fileName,
+                hasSample: !!t.buffer // Flag to know if we should look for audio data
+            };
+        });
+
+        // 2. Save Physical Audio Samples
+        engine.tracks.forEach(t => {
+            if (t.buffer) {
+                // Convert AudioBuffer to WAV Blob
+                const wavBlob = audioUtils.bufferToWav(t.buffer);
+                samplesFolder.file(`${t.id}.wav`, wavBlob);
             }
         });
-        ui.render();
+
+        // 3. Save Mixer & Plugins
+        const mixerData = engine.mixer.map(m => ({ 
+            gain: m.output.gain.value, 
+            fxData: m.fx.map(f => ({
+                code: f._sourceCode || "",
+                state: (f.getState) ? f.getState() : null 
+            })) 
+        }));
+
+        const projectData = {
+            version: "5.5",
+            bpm: engine.bpm, 
+            bankLengths: engine.bankLengths, 
+            song: engine.song, 
+            swing: engine.swing,
+            tracks: tracksMeta,
+            mixer: mixerData
+        };
+
+        zip.file("project.json", JSON.stringify(projectData));
+        
+        const blob = await zip.generateAsync({type:"blob"});
+        const a = document.createElement('a'); 
+        a.href = URL.createObjectURL(blob); 
+        a.download = "megaproject.daw"; 
+        a.click();
+    },
+
+    async importSession(el) {
+        if(!el.files[0]) return;
+        engine.initChannels();
+        
+        const btn = el.previousElementSibling;
+        const originalText = btn.innerText;
+        btn.innerText = "LOADING...";
+        
+        try {
+            const zip = await JSZip.loadAsync(el.files[0]);
+            const jsonStr = await zip.file("project.json").async("string");
+            const data = JSON.parse(jsonStr);
+            
+            // Restore Global Settings
+            engine.bpm = data.bpm || 120;
+            engine.bankLengths = data.bankLengths || Array(8).fill(16);
+            engine.song = data.song || [0];
+            engine.swing = data.swing || 0;
+            
+            // Restore Tracks
+            engine.tracks = []; // Clear current
+            
+            for (const tMeta of data.tracks) {
+                let newBuffer = null;
+                // If the track had a sample, try to find it in the zip
+                if (tMeta.hasSample) {
+                    const sampleFile = zip.file(`samples/${tMeta.id}.wav`);
+                    if (sampleFile) {
+                        const arrayBuffer = await sampleFile.async("arraybuffer");
+                        newBuffer = await engine.ctx.decodeAudioData(arrayBuffer);
+                    }
+                }
+                
+                engine.tracks.push({
+                    id: tMeta.id,
+                    bus: tMeta.bus,
+                    patterns: tMeta.patterns,
+                    fileName: tMeta.fileName,
+                    buffer: newBuffer,
+                    activeSource: null,
+                    gainNode: null
+                });
+            }
+
+            // Restore Mixer & Plugins
+            engine.mixer.forEach(m => { m.fx = []; m.output.gain.value = 1; });
+            
+            if (data.mixer) {
+                for (let i = 0; i < 8; i++) {
+                    if (data.mixer[i]) {
+                        engine.mixer[i].output.gain.value = data.mixer[i].gain;
+                        const fxList = data.mixer[i].fxData || data.mixer[i].fxCodes || [];
+                        
+                        for (const item of fxList) {
+                            const code = typeof item === 'string' ? item : item.code;
+                            const state = typeof item === 'object' ? item.state : null;
+                            if (code && code.length > 0) {
+                                await engine.injectFX(i, null, code, state);
+                            }
+                        }
+                    }
+                }
+            }
+
+            ui.render();
+            btn.innerText = "IMP";
+        } catch (e) {
+            console.error("Import Failed:", e);
+            alert("Corrupt or incompatible session file.");
+            btn.innerText = "ERROR";
+        }
     }
 };
-engine.addTrack();
-ui.render();
+
+// Start
+for(let i=0;i<4;i++) engine.addTrack();
 </script>
 </body>
 </html>
