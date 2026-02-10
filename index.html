@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MEGAMICRODAW // v9.4_MIXER_FIX</title>
+    <title>MEGAMICRODAW // v9.5_METER_FIX</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <link href="https://fonts.cdnfonts.com/css/vcr-osd-mono" rel="stylesheet">
     <style>
@@ -10,9 +10,9 @@
              --bg: #050a10; --panel: #0b1118; --surface: #10161e; --border: #1f2a36; 
              --text: #5f7d8c; --text-bright: #00d2d3; --accent: #00d2d3; --accent-dim: #008c8d; 
              --accent-glow: rgba(0, 210, 211, 0.3); --danger: #ff4757; --rec: #ff4757; 
-             --warn: #e67e22; --good: #2ecc71; --step-off: #151b24; --step-on: #00d2d3;  
-             --step-gen: #9b59b6; --playhead-color: #fff; --btn-bg: #151b24; --btn-hover: #1e2733;
-             --main-font: 'VCR OSD Mono', 'Courier New', monospace;
+             --warn: #e67e22; --good: #2ecc71; --step-off: #151b24; --step-on: #00d2d3; 
+             --step-gen: #9b59b6; --playhead-color: #fff; --btn-bg: #151b24; --btn-hover: #1e2733; 
+            --main-font: 'VCR OSD Mono', 'Courier New', monospace;
         }
         html, body { height: 100%; overflow: hidden; background: #000; color: var(--text); font-family: var(--main-font); text-transform: uppercase; margin: 0; padding: 0; user-select: none; font-size: 13px; }
         #chassis { display: flex; flex-direction: column; height: 100vh; width: 100vw; background: var(--bg); padding: 10px; box-sizing: border-box; gap: 10px; }
@@ -45,7 +45,8 @@
         #page-mix { flex-grow: 1; display: none; flex-direction: column; min-height: 0; } 
         .mixer-rack { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; flex-grow: 1; padding: 10px; background: #000; border: 1px solid var(--border); overflow: hidden; } 
         .mixer-strip { border: 1px solid var(--border); padding: 10px; background: var(--surface); display: flex; flex-direction: column; height: 100%; overflow: hidden; box-sizing: border-box; } 
-        .fx-stack { flex-grow: 1; min-height: 0; margin: 10px 0; border: 1px solid #000; background: #05080c; padding: 5px; overflow-y: auto; }        
+        .fx-stack { flex-grow: 1; min-height: 0; margin: 10px 0; border: 1px solid #000; background: #05080c; padding: 5px; overflow-y: auto; }
+        
         .fx-stack::-webkit-scrollbar { width: 6px; } .fx-stack::-webkit-scrollbar-track { background: #05080c; } .fx-stack::-webkit-scrollbar-thumb { background: var(--border); border-radius:3px; }
         .fx-box { margin-bottom: 5px; background: #000; border: 1px solid var(--border); flex-shrink: 0; } 
         .fx-box.drag-over { border: 1px solid var(--accent); background: #0a1f20; }
@@ -69,7 +70,8 @@
         <div class="ctrl-group">
             <div id="status-led"></div>
             <button id="pBtn" onclick="engine.toggle()" style="width:60px;">START</button>
-            <button id="modeBtn" onclick="ui.toggleMode()">PAT</button>            
+            <button id="modeBtn" onclick="ui.toggleMode()">PAT</button>
+            
             <div style="display:flex; gap:1px;">
                 <button onclick="ui.copyPattern()" title="Copy Current Pattern">CPY</button>
                 <button onclick="ui.pastePattern()" title="Paste to Current Pattern">PST</button>
@@ -393,7 +395,10 @@ const engine = {
             const blob = new Blob([code], { type: 'application/javascript' });
             const url = URL.createObjectURL(blob);
             const mod = await import(url + '#' + Date.now());
-            const inst = new (mod.default || Object.values(mod)[0])(this.ctx);
+            
+            // --- UPDATED: PASS THE FADER (mixer output) TO THE PLUGIN ---
+            const inst = new (mod.default || Object.values(mod)[0])(this.ctx, this.mixer[chIdx].output);
+            
             inst._sourceCode = code;
             if (state && inst.setState) inst.setState(state);
             this.mixer[chIdx].fx.push(inst);
@@ -631,7 +636,7 @@ const ui = {
                 for(let s=0; s<32; s++) {
                     const opacity = s >= engine.bankLengths[b] ? 0.2 : 1;
                     const h = currentVels[s] * 100;
-                    velHTML += `<div class="vel-bar-slot" style="opacity:${opacity}" 
+                    velHTML += `<div class="vel-bar-slot" style="opacity:${opacity}"
                                    onmousedown="ui.handleVelInput(event, ${i}, ${s})"
                                    onmousemove="ui.handleVelInput(event, ${i}, ${s})">
                                     <div class="vel-bar-fill" style="height:${h}%"></div>
