@@ -1,22 +1,17 @@
- 
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MEGAMICRODAW // v9.4_MIXER_FIX</title>
-    <title>MEGAMICRODAW // v9.5_METER_FIX</title>
+    <title>MEGAMICRODAW // v9.7_FIXED</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <link href="https://fonts.cdnfonts.com/css/vcr-osd-mono" rel="stylesheet">
     <style>
-        :root { 
-             --bg: #050a10; --panel: #0b1118; --surface: #10161e; --border: #1f2a36; 
-             --text: #5f7d8c; --text-bright: #00d2d3; --accent: #00d2d3; --accent-dim: #008c8d; 
-             --accent-glow: rgba(0, 210, 211, 0.3); --danger: #ff4757; --rec: #ff4757; 
-             --warn: #e67e22; --good: #2ecc71; --step-off: #151b24; --step-on: #00d2d3;  
-             --step-gen: #9b59b6; --playhead-color: #fff; --btn-bg: #151b24; --btn-hover: #1e2733;
-             --main-font: 'VCR OSD Mono', 'Courier New', monospace;
-             --warn: #e67e22; --good: #2ecc71; --step-off: #151b24; --step-on: #00d2d3; 
-             --step-gen: #9b59b6; --playhead-color: #fff; --btn-bg: #151b24; --btn-hover: #1e2733; 
+        :root {
+            --bg: #050a10; --panel: #0b1118; --surface: #10161e; --border: #1f2a36;
+            --text: #5f7d8c; --text-bright: #00d2d3; --accent: #00d2d3; --accent-dim: #008c8d;
+            --accent-glow: rgba(0, 210, 211, 0.3); --danger: #ff4757; --rec: #ff4757;
+            --warn: #e67e22; --good: #2ecc71; --step-off: #151b24; --step-on: #00d2d3;
+            --step-gen: #9b59b6; --playhead-color: #fff; --btn-bg: #151b24; --btn-hover: #1e2733;
             --main-font: 'VCR OSD Mono', 'Courier New', monospace;
         }
         html, body { height: 100%; overflow: hidden; background: #000; color: var(--text); font-family: var(--main-font); text-transform: uppercase; margin: 0; padding: 0; user-select: none; font-size: 13px; }
@@ -24,7 +19,7 @@
         .panel { border: 1px solid var(--border); background: var(--panel); box-shadow: 0 0 10px rgba(0,0,0,0.5); flex-shrink: 0; }
         #top-bar { padding: 10px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--border); }
         #page-seq { display: flex; flex-direction: column; flex-grow: 1; min-height: 0; gap: 10px; }
-        #bank-nav { padding: 5px; display: flex; gap: 2px; background: var(--surface); border:1px solid var(--border); }
+        #bank-nav { padding: 5px; display: flex; gap: 2px; background: var(--surface); border: 1px solid var(--border); }
         #track-rack-container { display: flex; flex-direction: column; flex-grow: 1; min-height: 0; background: var(--surface); border: 1px solid var(--border); }
         #track-toolbar { padding: 5px 10px; background: #0e131a; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
         #timeline-header { display: grid; grid-template-columns: 100px 1fr 80px 30px; gap: 8px; padding: 5px; padding-bottom: 10px; background: #0e131a; border-bottom: 1px solid var(--border); align-items: end; }
@@ -34,7 +29,7 @@
         .drawer.open { display: grid; }
         .drawer-ctrl { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 4px; background: #000; border: 1px solid var(--border); padding: 5px; }
         .roll-container { grid-column: 2; height: 120px; background: #000; position: relative; border: 1px solid var(--border); display: grid; grid-template-columns: repeat(32, 1fr); }
-        .roll-col { border-right: 1px solid #1a222b; display: flex; flex-direction: column-reverse; } .roll-col:nth-child(4n) { border-right: 1px solid #334050; } 
+        .roll-col { border-right: 1px solid #1a222b; display: flex; flex-direction: column-reverse; } .roll-col:nth-child(4n) { border-right: 1px solid #334050; }
         .roll-cell { flex: 1; border-top: 1px solid #1a222b; cursor: pointer; position: relative; } .roll-cell:hover { background: #1a222b; }
         .roll-cell.black-key { background: #0a0e14; } .roll-cell.active { background: var(--accent); box-shadow: 0 0 10px var(--accent-glow); z-index: 2; }
         .vel-grid { grid-column: 2; display: grid; grid-template-columns: repeat(32, 1fr); gap: 2px; height: 60px; background: #000; padding: 2px; border: 1px solid var(--border); }
@@ -44,30 +39,27 @@
         .step { height: 24px; cursor: pointer; background: var(--step-off); transition: background 0.1s; } .step.on { background: var(--step-on); box-shadow: 0 0 10px var(--accent-glow); } .step.beat-mark { border-left: 1px solid #333; }
         .step.gen-mode { background: #4a235a; } .step.gen-mode.on { background: #d066ff; box-shadow: 0 0 10px rgba(208, 102, 255, 0.5); }
         .playhead-slot { width: 4px; height: 4px; background: #333; margin: auto; transition: all 0.05s; } .playhead-slot.active { background: #fff; height: 100%; box-shadow: 0 0 10px #fff; }
-        #song-arranger-panel { padding: 10px; flex-shrink: 0; background: var(--panel); border-top: 1px solid var(--border); } #song-arranger-box { background:#000; padding:8px; margin-top:5px; overflow-x:auto; display: flex; gap: 5px; align-items: center; border: 1px solid var(--border); } #song-cells button { width: 30px; padding: 5px 0; }
-
-        /* --- MIXER SCROLL FIX --- */
-        #page-mix { flex-grow: 1; display: none; flex-direction: column; min-height: 0; } 
-        .mixer-rack { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; flex-grow: 1; padding: 10px; background: #000; border: 1px solid var(--border); overflow: hidden; } 
-        .mixer-strip { border: 1px solid var(--border); padding: 10px; background: var(--surface); display: flex; flex-direction: column; height: 100%; overflow: hidden; box-sizing: border-box; } 
-        .fx-stack { flex-grow: 1; min-height: 0; margin: 10px 0; border: 1px solid #000; background: #05080c; padding: 5px; overflow-y: auto; }        
-        .fx-stack { flex-grow: 1; min-height: 0; margin: 10px 0; border: 1px solid #000; background: #05080c; padding: 5px; overflow-y: auto; }
+        #song-arranger-panel { padding: 10px; flex-shrink: 0; background: var(--panel); border-top: 1px solid var(--border); } #song-arranger-box { background: #000; padding: 8px; margin-top: 5px; overflow-x: auto; display: flex; gap: 5px; align-items: center; border: 1px solid var(--border); } #song-cells button { width: 30px; padding: 5px 0; }
         
-        .fx-stack::-webkit-scrollbar { width: 6px; } .fx-stack::-webkit-scrollbar-track { background: #05080c; } .fx-stack::-webkit-scrollbar-thumb { background: var(--border); border-radius:3px; }
-        .fx-box { margin-bottom: 5px; background: #000; border: 1px solid var(--border); flex-shrink: 0; } 
+        /* --- MIXER --- */
+        #page-mix { flex-grow: 1; display: none; flex-direction: column; min-height: 0; }
+        .mixer-rack { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; flex-grow: 1; padding: 10px; background: #000; border: 1px solid var(--border); overflow: hidden; }
+        .mixer-strip { border: 1px solid var(--border); padding: 10px; background: var(--surface); display: flex; flex-direction: column; height: 100%; overflow: hidden; box-sizing: border-box; }
+        .fx-stack { flex-grow: 1; min-height: 0; margin: 10px 0; border: 1px solid #000; background: #05080c; padding: 5px; overflow-y: auto; }
+        .fx-stack::-webkit-scrollbar { width: 6px; } .fx-stack::-webkit-scrollbar-track { background: #05080c; } .fx-stack::-webkit-scrollbar-thumb { background: var(--border); border-radius: 0; }
+        .fx-box { margin-bottom: 5px; background: #000; border: 1px solid var(--border); flex-shrink: 0; }
         .fx-box.drag-over { border: 1px solid var(--accent); background: #0a1f20; }
-        /* ------------------------ */
-
         .fx-handle { height: 14px; background: #0e131a; color: var(--text); font-size: 8px; display: flex; justify-content: center; align-items: center; cursor: grab; letter-spacing: 2px; border-bottom: 1px solid var(--border); } .fx-handle:hover { background: #1a222b; color: var(--accent); } .fx-handle:active { cursor: grabbing; background: var(--accent); color: #000; }
+        
         .flex { display: flex; gap: 10px; align-items: center; } .ctrl-group { border-right: 1px solid var(--border); padding-right: 15px; margin-right: 5px; display: flex; align-items: center; gap: 15px; } .ctrl-group:last-child { border: none; }
         .mini-slider-box { display: flex; flex-direction: column; width: 100px; position: relative; top: -2px; } .mini-slider-box label { font-size: 10px; color: var(--text); margin-bottom: 4px; letter-spacing: 1px; font-weight: bold; }
         input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; cursor: pointer; margin: 0; } input[type=range]:focus { outline: none; } input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 2px; background: #333; } input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 10px; width: 10px; background: var(--accent); margin-top: -4px; border-radius: 0; border: 1px solid #000; }
-        input[type=number] { background: #000; color: var(--accent); border: 1px solid var(--border); padding-left: 5px; width: 100%; font-family: var(--main-font); font-weight: bold; font-size: 12px;}
-        button { background: var(--btn-bg); color: var(--text); border: 1px solid var(--border); cursor: pointer; padding: 6px 12px; font-size: 11px; font-weight: normal; text-transform: uppercase; font-family: var(--main-font); transition: all 0.1s ease; } button:hover { background: var(--btn-hover); color: var(--text-bright); border-color: var(--text-bright); } button:active { transform: translateY(1px); }
+        input[type=number] { background: #000; color: var(--accent); border: 1px solid var(--border); padding-left: 5px; width: 100%; font-family: var(--main-font); font-weight: bold; font-size: 12px; border-radius: 0; }
+        button { background: var(--btn-bg); color: var(--text); border: 1px solid var(--border); cursor: pointer; padding: 6px 12px; font-size: 11px; font-weight: normal; text-transform: uppercase; font-family: var(--main-font); transition: all 0.1s ease; border-radius: 0; } button:hover { background: var(--btn-hover); color: var(--text-bright); border-color: var(--text-bright); } button:active { transform: translateY(1px); }
         button.active { background: var(--accent-dim); color: #fff; border-color: var(--accent); box-shadow: 0 0 10px var(--accent-glow); } button.gen-active { background: #6c3483; color: #fff; border-color: #af7ac5; } button.recording { background: var(--rec); color: #fff; border-color: #fff; box-shadow: 0 0 10px var(--rec); }
         button.btn-mute.active { background: var(--warn); color: #000; border-color: #fff; box-shadow: none; } button.btn-solo.active { background: var(--good); color: #000; border-color: #fff; box-shadow: none; }
         .data-font { font-size: 11px; letter-spacing: 1px; color: var(--text-bright); font-family: var(--main-font); } #status-led { width: 6px; height: 6px; background: #333; } #status-led.online { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
-        select { background: #000; color: var(--text-bright); border: 1px solid var(--border); padding: 4px; width: 100%; font-family: var(--main-font); font-size: 11px;} .btn-tiny { padding: 2px 5px; font-size: 10px; line-height: 1; } .btn-group { display: flex; gap: 1px; width: 100%; margin-top:2px; } .btn-group button { flex: 1; }
+        select { background: #000; color: var(--text-bright); border: 1px solid var(--border); padding: 4px; width: 100%; font-family: var(--main-font); font-size: 11px; border-radius: 0; } .btn-tiny { padding: 2px 5px; font-size: 10px; line-height: 1; } .btn-group { display: flex; gap: 1px; width: 100%; margin-top: 2px; } .btn-group button { flex: 1; }
     </style>
 </head>
 <body>
@@ -76,9 +68,7 @@
         <div class="ctrl-group">
             <div id="status-led"></div>
             <button id="pBtn" onclick="engine.toggle()" style="width:60px;">START</button>
-            <button id="modeBtn" onclick="ui.toggleMode()">PAT</button>            
             <button id="modeBtn" onclick="ui.toggleMode()">PAT</button>
-            
             <div style="display:flex; gap:1px;">
                 <button onclick="ui.copyPattern()" title="Copy Current Pattern">CPY</button>
                 <button onclick="ui.pastePattern()" title="Paste to Current Pattern">PST</button>
@@ -112,13 +102,12 @@
             <button id="tMix" onclick="ui.tab('mix')">MIX</button>
         </div>
     </div>
-
     <div id="page-seq">
         <div id="bank-nav" class="panel"></div>
         <div id="track-rack-container">
             <div id="track-toolbar">
                 <button onclick="engine.addTrack()">+ TRACK</button>
-                <div class="flex" style="background: #000; border-radius: 3px; padding: 2px 5px; border:1px solid var(--border);">
+                <div class="flex" style="background: #000; padding: 2px 5px; border: 1px solid var(--border);">
                     <button onclick="engine.updateBankLength(-1)" style="padding: 2px 8px; height: 20px;">&lt;</button>
                     <span class="data-font" id="bank-len-disp" style="min-width:110px; text-align:center; line-height: 20px;">PAT 1 LEN: 16</span>
                     <button onclick="engine.updateBankLength(1)" style="padding: 2px 8px; height: 20px;">&gt;</button>
@@ -139,7 +128,6 @@
             </div>
         </div>
     </div>
-
     <div id="page-mix"><div id="mixer-rack" class="mixer-rack"></div></div>
 </div>
 
@@ -175,8 +163,7 @@ const audioUtils = {
 
 // --- RECORDER ---
 const recorder = {
-    recording: false, armed: false, processor: null, left: [], right: [],
-    previewAudio: null, 
+    recording: false, armed: false, processor: null, left: [], right: [], previewAudio: null,
     toggleArm() {
         this.armed = !this.armed; const btn = document.getElementById('armBtn');
         if(this.armed) { btn.classList.add('armed'); btn.innerText = "WAITING..."; document.getElementById('rec-ui-hidden').style.display = 'none'; }
@@ -195,47 +182,29 @@ const recorder = {
         this.recording = true; const btn = document.getElementById('armBtn'); btn.classList.remove('armed'); btn.classList.add('recording'); btn.innerText = "REC";
     },
     stop() { if(this.recording) { this.recording = false; if(this.processor) { this.processor.disconnect(); engine.master.disconnect(this.processor); } this.finish(); } },
-
     finish() {
-        const btn = document.getElementById('armBtn'); 
-        btn.classList.remove('recording'); 
-        this.armed = false; 
-        btn.style.display = 'none';
-
+        const btn = document.getElementById('armBtn');
+        btn.classList.remove('recording'); this.armed = false; btn.style.display = 'none';
         const merge = (b) => { let l=b.reduce((a,c)=>a+c.length,0), r=new Float32Array(l), o=0; b.forEach(c=>{r.set(c,o);o+=c.length}); return r; };
         const flatL = merge(this.left); const flatR = merge(this.right);
         const interleaved = audioUtils.interleave(flatL, flatR);
         const wavBlob = audioUtils.encodeWAV(interleaved, 2, engine.ctx.sampleRate);
         const url = URL.createObjectURL(wavBlob);
-
         if(this.previewAudio) { this.previewAudio.pause(); this.previewAudio = null; }
         this.previewAudio = new Audio(url);
         this.previewAudio.onended = () => { document.getElementById('rec-playBtn').innerText = "PLAY"; };
-
-        document.getElementById('rec-dl').href = url;
-        document.getElementById('rec-ui-hidden').style.display = 'flex';
+        document.getElementById('rec-dl').href = url; document.getElementById('rec-ui-hidden').style.display = 'flex';
     },
-
     togglePreview() {
         if(!this.previewAudio) return;
         const btn = document.getElementById('rec-playBtn');
-        if(this.previewAudio.paused) {
-            this.previewAudio.play();
-            btn.innerText = "STOP";
-        } else {
-            this.previewAudio.pause();
-            this.previewAudio.currentTime = 0; 
-            btn.innerText = "PLAY";
-        }
+        if(this.previewAudio.paused) { this.previewAudio.play(); btn.innerText = "STOP"; }
+        else { this.previewAudio.pause(); this.previewAudio.currentTime = 0; btn.innerText = "PLAY"; }
     },
-
     clear() {
         if(this.previewAudio) { this.previewAudio.pause(); this.previewAudio = null; }
         document.getElementById('rec-ui-hidden').style.display = 'none';
-        const btn = document.getElementById('armBtn');
-        btn.style.display = 'block';
-        btn.classList.remove('recording');
-        btn.innerText = "ARM REC";
+        const btn = document.getElementById('armBtn'); btn.style.display = 'block'; btn.classList.remove('recording'); btn.innerText = "ARM REC";
         this.armed = false;
     }
 };
@@ -244,24 +213,16 @@ const recorder = {
 const engine = {
     ctx: null, master: null, limiter: null, tracks: [], mixer: [], song: [0],
     bpm: 120, playing: false, step: 0, bank: 0, songIdx: 0, nextTime: 0, timer: null,
-    bankLengths: Array(8).fill(16), swing: 0, 
-
+    bankLengths: Array(8).fill(16), swing: 0,
     initChannels() {
         if (this.ctx) return;
         const AC = window.AudioContext || window.webkitAudioContext;
         this.ctx = new AC();
-
         this.master = this.ctx.createGain();
         this.limiter = this.ctx.createDynamicsCompressor();
-        this.limiter.threshold.value = -1.0; 
-        this.limiter.knee.value = 0;
-        this.limiter.ratio.value = 20; 
-        this.limiter.attack.value = 0.001;
-        this.limiter.release.value = 0.05; 
-
-        this.master.connect(this.limiter);
-        this.limiter.connect(this.ctx.destination);
-
+        this.limiter.threshold.value = -1.0; this.limiter.knee.value = 0;
+        this.limiter.ratio.value = 20; this.limiter.attack.value = 0.001; this.limiter.release.value = 0.05;
+        this.master.connect(this.limiter); this.limiter.connect(this.ctx.destination);
         for(let i=0; i<8; i++) {
             const inp = this.ctx.createGain(); const out = this.ctx.createGain();
             inp.connect(out); out.connect(this.master);
@@ -287,7 +248,6 @@ const engine = {
             this.playStep(this.step, this.nextTime, activeBank);
             this.nextTime += (60 / this.bpm / 4);
             this.step++;
-
             if(this.step >= this.bankLengths[activeBank]) {
                 this.step = 0;
                 this.tracks.forEach((tr, idx) => {
@@ -304,67 +264,40 @@ const engine = {
         }
         this.timer = setTimeout(() => this.scheduler(), 25);
     },
-
     randomizePattern(tIdx, bank) {
-        const tr = this.tracks[tIdx];
-        const len = this.bankLengths[bank];
-        const baseNote = tr.viewOctave * 12; 
-
+        const tr = this.tracks[tIdx]; const len = this.bankLengths[bank]; const baseNote = tr.viewOctave * 12;
         for(let s=0; s<len; s++) {
             tr.patterns[bank][s] = Math.random() > 0.7;
-            if(tr.patterns[bank][s]) {
-                tr.notes[bank][s] = baseNote + Math.floor(Math.random() * 12);
-            }
+            if(tr.patterns[bank][s]) { tr.notes[bank][s] = baseNote + Math.floor(Math.random() * 12); }
         }
     },
-
     playStep(s, t, b) {
         const sw = (s % 2 !== 0) ? (this.swing * (60 / this.bpm / 4)) : 0;
-        const time = t + sw;
-
-        const anySolo = this.tracks.some(tr => tr.solo);
-
+        const time = t + sw; const anySolo = this.tracks.some(tr => tr.solo);
         this.tracks.forEach(tr => {
             const shouldPlay = anySolo ? tr.solo : !tr.mute;
-
             if (shouldPlay && tr.patterns[b][s]) {
                 if (!this.mixer[tr.bus]) return;
                 const ch = this.mixer[tr.bus];
-
                 const vel = (tr.velocities && tr.velocities[b]) ? tr.velocities[b][s] : 1;
-                const absNote = (tr.notes && tr.notes[b]) ? tr.notes[b][s] : 0; 
+                // Note 36 in your formula calculates out to ~261.63 Hz (1.0x native sample speed)
+                const absNote = (tr.notes && tr.notes[b]) ? tr.notes[b][s] : 36;
                 const finalNote = absNote + (tr.transpose * 12);
                 const freq = 32.703 * Math.pow(2, finalNote / 12);
-
-                ch.fx.forEach(f => { 
-                    if (f.trigger) f.trigger(time, freq, vel); 
-                });
-
+                ch.fx.forEach(f => { if (f.trigger) f.trigger(time, freq, vel); });
                 if (tr.buffer) {
-                    // SMOOTH CHOKE 
                     if (tr.activeSource && tr.gainNode) {
                         tr.gainNode.gain.cancelScheduledValues(time);
                         tr.gainNode.gain.setValueAtTime(tr.gainNode.gain.value, time);
                         tr.gainNode.gain.linearRampToValueAtTime(0, time + 0.005);
                         tr.activeSource.stop(time + 0.01);
                     }
-
-                    const src = this.ctx.createBufferSource(); 
-                    src.buffer = tr.buffer;
-                    const rate = freq / 261.63; 
-                    src.playbackRate.value = rate;
-
+                    const src = this.ctx.createBufferSource(); src.buffer = tr.buffer;
+                    const rate = freq / 261.63; src.playbackRate.value = rate;
                     const g = this.ctx.createGain();
-
-                    // SMOOTH ATTACK
-                    g.gain.setValueAtTime(0, time);
-                    g.gain.linearRampToValueAtTime(vel, time + 0.003); 
-
-                    src.connect(g); 
-                    g.connect(ch.input); 
-                    src.start(time);
-                    tr.activeSource = src; 
-                    tr.gainNode = g;
+                    g.gain.setValueAtTime(0, time); g.gain.linearRampToValueAtTime(vel, time + 0.003);
+                    src.connect(g); g.connect(ch.input); src.start(time);
+                    tr.activeSource = src; tr.gainNode = g;
                 }
             }
         });
@@ -384,11 +317,11 @@ const engine = {
         ui.render(); ui.updatePlayhead(0);
     },
     rebuildChain(i) {
-        const ch = this.mixer[i]; ch.input.disconnect(); 
+        const ch = this.mixer[i]; ch.input.disconnect();
         ch.fx.forEach(f => { if(f.output) f.output.disconnect(); });
         let p = ch.input;
         if (ch.fx.length > 0) {
-            ch.fx.forEach(f => { 
+            ch.fx.forEach(f => {
                 if (f.input) p.connect(f.input);
                 if (f.output) p = f.output;
             });
@@ -402,11 +335,7 @@ const engine = {
             const blob = new Blob([code], { type: 'application/javascript' });
             const url = URL.createObjectURL(blob);
             const mod = await import(url + '#' + Date.now());
-            const inst = new (mod.default || Object.values(mod)[0])(this.ctx);
-            
-            // --- UPDATED: PASS THE FADER (mixer output) TO THE PLUGIN ---
             const inst = new (mod.default || Object.values(mod)[0])(this.ctx, this.mixer[chIdx].output);
-            
             inst._sourceCode = code;
             if (state && inst.setState) inst.setState(state);
             this.mixer[chIdx].fx.push(inst);
@@ -415,30 +344,23 @@ const engine = {
         } catch (e) { console.error("FX Load Error", e); }
     },
     removeFX(c, f) { this.mixer[c].fx.splice(f, 1); this.rebuildChain(c); ui.renderMixer(); },
-
     moveFX(chIdx, fromIdx, toIdx) {
         const fxList = this.mixer[chIdx].fx;
         if (fromIdx < 0 || fromIdx >= fxList.length || toIdx < 0 || toIdx >= fxList.length) return;
         const item = fxList[fromIdx];
-        fxList.splice(fromIdx, 1);
-        fxList.splice(toIdx, 0, item);
-        this.rebuildChain(chIdx);
-        ui.renderMixer();
+        fxList.splice(fromIdx, 1); fxList.splice(toIdx, 0, item);
+        this.rebuildChain(chIdx); ui.renderMixer();
     },
-
     addTrack() {
-        this.tracks.push({ 
-            id: Date.now()+Math.random(), buffer: null, fileName: "EMPTY", bus: 0, activeSource: null, gainNode: null,
+        this.tracks.push({
+            id: 'trk_' + Date.now() + '_' + Math.floor(Math.random()*1000), buffer: null, fileName: "EMPTY", bus: 0, activeSource: null, gainNode: null,
             patterns: Array.from({length:8}, () => Array(32).fill(false)),
             velocities: Array.from({length:8}, () => Array(32).fill(1.0)),
-            notes: Array.from({length:8}, () => Array(32).fill(36)), 
-            viewOctave: 3, 
-            transpose: 0, 
-            genModes: Array(8).fill(false),
-            mute: false, 
-            solo: false, 
-            drawerOpen: false,
-            drawerMode: 'vel' 
+            // Reverted back to 36 (equals 261.63 Hz / 1.0x speed in your custom scale)
+            notes: Array.from({length:8}, () => Array(32).fill(36)),
+            // Reverted view octave back to 3
+            viewOctave: 3, transpose: 0, genModes: Array(8).fill(false),
+            mute: false, solo: false, drawerOpen: false, drawerMode: 'vel'
         });
         ui.render();
     },
@@ -446,51 +368,23 @@ const engine = {
     removeSongCell() { if(this.song.length > 1) { this.song.pop(); ui.render(); } },
     updateBankLength(dir) {
         let val = this.bankLengths[this.bank] + (dir * 4);
-        this.bankLengths[this.bank] = Math.max(4, Math.min(32, val));
-        ui.render();
+        this.bankLengths[this.bank] = Math.max(4, Math.min(32, val)); ui.render();
     },
     updateViewOctave(tIdx, dir) {
         engine.tracks[tIdx].viewOctave += dir;
-        engine.tracks[tIdx].viewOctave = Math.max(0, Math.min(8, engine.tracks[tIdx].viewOctave));
-        ui.render();
+        engine.tracks[tIdx].viewOctave = Math.max(0, Math.min(8, engine.tracks[tIdx].viewOctave)); ui.render();
     },
-    updateTranspose(tIdx, dir) {
-        engine.tracks[tIdx].transpose += dir;
-        ui.render();
-    },
-
-    doRandom(tIdx) {
-        const b = (ui.mode === 'song') ? engine.song[engine.songIdx] : engine.bank;
-        this.randomizePattern(tIdx, b);
-        ui.render();
-    },
-    doClear(tIdx) {
-        const b = (ui.mode === 'song') ? engine.song[engine.songIdx] : engine.bank;
-        const tr = this.tracks[tIdx];
-        tr.patterns[b].fill(false);
-        ui.render();
-    },
-    toggleGen(tIdx) {
-        const b = (ui.mode === 'song') ? engine.song[engine.songIdx] : engine.bank;
-        if(!this.tracks[tIdx].genModes) this.tracks[tIdx].genModes = Array(8).fill(false);
-        this.tracks[tIdx].genModes[b] = !this.tracks[tIdx].genModes[b];
-        ui.render();
-    },
-    toggleMute(tIdx) {
-        engine.tracks[tIdx].mute = !engine.tracks[tIdx].mute;
-        ui.render();
-    },
-    toggleSolo(tIdx) {
-        engine.tracks[tIdx].solo = !engine.tracks[tIdx].solo;
-        ui.render();
-    }
+    updateTranspose(tIdx, dir) { engine.tracks[tIdx].transpose += dir; ui.render(); },
+    doRandom(tIdx) { const b = (ui.mode === 'song') ? engine.song[engine.songIdx] : engine.bank; this.randomizePattern(tIdx, b); ui.render(); },
+    doClear(tIdx) { const b = (ui.mode === 'song') ? engine.song[engine.songIdx] : engine.bank; const tr = this.tracks[tIdx]; tr.patterns[b].fill(false); ui.render(); },
+    toggleGen(tIdx) { const b = (ui.mode === 'song') ? engine.song[engine.songIdx] : engine.bank; if(!this.tracks[tIdx].genModes) this.tracks[tIdx].genModes = Array(8).fill(false); this.tracks[tIdx].genModes[b] = !this.tracks[tIdx].genModes[b]; ui.render(); },
+    toggleMute(tIdx) { engine.tracks[tIdx].mute = !engine.tracks[tIdx].mute; ui.render(); },
+    toggleSolo(tIdx) { engine.tracks[tIdx].solo = !engine.tracks[tIdx].solo; ui.render(); }
 };
 
 // --- UI LOGIC ---
 const ui = {
-    mode: 'pattern',
-    clipboard: null, 
-
+    mode: 'pattern', clipboard: null,
     tab(name) {
         engine.initChannels();
         document.getElementById('page-seq').style.display = name === 'seq' ? 'flex' : 'none';
@@ -501,17 +395,12 @@ const ui = {
     },
     toggleMode() {
         this.mode = (this.mode === 'pattern') ? 'song' : 'pattern';
-        document.getElementById('modeBtn').innerText = this.mode === 'pattern' ? 'PAT' : 'SONG';
-        this.render();
+        document.getElementById('modeBtn').innerText = this.mode === 'pattern' ? 'PAT' : 'SONG'; this.render();
     },
     toggleDrawer(tIdx, type) {
         const tr = engine.tracks[tIdx];
-        if (tr.drawerOpen && tr.drawerMode === type) {
-            tr.drawerOpen = false; 
-        } else {
-            tr.drawerOpen = true;
-            tr.drawerMode = type;
-        }
+        if (tr.drawerOpen && tr.drawerMode === type) { tr.drawerOpen = false; }
+        else { tr.drawerOpen = true; tr.drawerMode = type; }
         this.render();
     },
     handleVelInput(e, tIdx, stepIdx) {
@@ -528,56 +417,39 @@ const ui = {
         const b = (this.mode === 'song') ? engine.song[engine.songIdx] : engine.bank;
         const tr = engine.tracks[tIdx];
         const absNote = (tr.viewOctave * 12) + noteVal;
-
-        if (tr.patterns[b][stepIdx] && tr.notes[b][stepIdx] === absNote) {
-            tr.patterns[b][stepIdx] = false;
-        } else {
-            tr.notes[b][stepIdx] = absNote;
-            tr.patterns[b][stepIdx] = true;
-        }
+        if (tr.patterns[b][stepIdx] && tr.notes[b][stepIdx] === absNote) { tr.patterns[b][stepIdx] = false; }
+        else { tr.notes[b][stepIdx] = absNote; tr.patterns[b][stepIdx] = true; }
         this.render();
     },
     copyPattern() {
         const b = (this.mode === 'song') ? engine.song[engine.songIdx] : engine.bank;
         this.clipboard = engine.tracks.map(tr => ({
-            pattern: [...tr.patterns[b]],
-            velocity: [...tr.velocities[b]],
-            note: [...tr.notes[b]],
-            genMode: (tr.genModes ? tr.genModes[b] : false)
+            pattern: [...tr.patterns[b]], velocity: [...tr.velocities[b]], note: [...tr.notes[b]], genMode: (tr.genModes ? tr.genModes[b] : false)
         }));
         alert("Pattern Copied!");
     },
     pastePattern() {
         if(!this.clipboard) return;
         const b = (this.mode === 'song') ? engine.song[engine.songIdx] : engine.bank;
-
         engine.tracks.forEach((tr, i) => {
             if(this.clipboard[i]) {
-                tr.patterns[b] = [...this.clipboard[i].pattern];
-                tr.velocities[b] = [...this.clipboard[i].velocity];
-                tr.notes[b] = [...this.clipboard[i].note];
-                if(tr.genModes) tr.genModes[b] = this.clipboard[i].genMode;
+                tr.patterns[b] = [...this.clipboard[i].pattern]; tr.velocities[b] = [...this.clipboard[i].velocity];
+                tr.notes[b] = [...this.clipboard[i].note]; if(tr.genModes) tr.genModes[b] = this.clipboard[i].genMode;
             }
         });
         this.render();
     },
-
     render() {
         const b = (this.mode === 'song') ? engine.song[engine.songIdx] : engine.bank;
         const list = document.getElementById('tracks-list'); if(!list) return;
         document.getElementById('bank-len-disp').innerText = `PAT ${b+1} LEN: ${engine.bankLengths[b]}`;
         list.innerHTML = '';
-
         const ph = document.getElementById('playhead-grid'); ph.innerHTML = '';
         for(let i=0; i<32; i++) ph.innerHTML += `<div class="playhead-slot"></div>`;
 
         engine.tracks.forEach((t, i) => {
-            const wrapper = document.createElement('div');
-            wrapper.className = 'track-wrapper';
-
-            const row = document.createElement('div'); 
-            row.className = 'track-row';
-
+            const wrapper = document.createElement('div'); wrapper.className = 'track-wrapper';
+            const row = document.createElement('div'); row.className = 'track-row';
             row.innerHTML = `
                 <div>
                     <div style="display:flex; gap:1px; margin-bottom:2px;">
@@ -585,16 +457,14 @@ const ui = {
                         <button class="btn-tiny ${t.solo ? 'active btn-solo' : ''}" onclick="engine.toggleSolo(${i})" style="flex:1;">S</button>
                     </div>
                     <button class="btn-tiny" onclick="this.nextElementSibling.click()" style="width:100%">LOAD</button>
-                    <input type="file" style="display:none" onchange="ui.loadSmp(${t.id}, this)">
+                    <input type="file" style="display:none" onchange="ui.loadSmp('${t.id}', this)">
                     <div class="data-font" style="font-size:8px; margin-top:2px;">${t.fileName}</div>
                     <div class="btn-group">
                         <button class="btn-tiny ${t.drawerOpen && t.drawerMode=='vel' ? 'active' : ''}" onclick="ui.toggleDrawer(${i}, 'vel')">VEL</button>
                         <button class="btn-tiny ${t.drawerOpen && t.drawerMode=='roll' ? 'active' : ''}" onclick="ui.toggleDrawer(${i}, 'roll')">NOTE</button>
                     </div>
                 </div>
-                
                 <div class="step-grid" id="grid-${t.id}"></div>
-                
                 <select class="data-font" onchange="engine.tracks[${i}].bus=this.value; engine.rebuildChain(this.value)">
                     ${engine.mixer.map((_,m)=>`<option value="${m}" ${t.bus==m?'selected':''}>CH ${m+1}</option>`).join('')}
                 </select>
@@ -602,14 +472,11 @@ const ui = {
             `;
             wrapper.appendChild(row);
 
-            const drawer = document.createElement('div');
-            drawer.className = `drawer ${t.drawerOpen ? 'open' : ''}`;
-
+            const drawer = document.createElement('div'); drawer.className = `drawer ${t.drawerOpen ? 'open' : ''}`;
             const leftCtrl = document.createElement('div');
             if(t.drawerMode === 'roll') {
                 if(!t.genModes) t.genModes = Array(8).fill(false);
                 const isGenActive = t.genModes[b];
-
                 leftCtrl.className = 'drawer-ctrl';
                 leftCtrl.innerHTML = `
                     <div style="display:flex; gap:2px;">
@@ -617,84 +484,65 @@ const ui = {
                         <button class="btn-tiny" onclick="engine.updateViewOctave(${i}, -1)">▼</button>
                     </div>
                     <div class="data-font" style="font-size:9px; color:#fff">VIEW: ${t.viewOctave}</div>
-                    
                     <div style="display:flex; gap:2px; margin-top:2px;">
                         <button class="btn-tiny" onclick="engine.updateTranspose(${i}, 1)">+</button>
                         <button class="btn-tiny" onclick="engine.updateTranspose(${i}, -1)">-</button>
                     </div>
                     <div class="data-font" style="font-size:9px; color:var(--accent)">XPOS: ${t.transpose}</div>
-                    
                     <div style="height:1px; background:#333; width:100%; margin:2px 0;"></div>
-                    
                     <button class="btn-tiny" onclick="engine.doRandom(${i})" title="Randomize in Current View">RND</button>
                     <button class="btn-tiny ${isGenActive ? 'gen-active' : ''}" onclick="engine.toggleGen(${i})" title="Auto-Gen in Current View">GEN</button>
                     <button class="btn-tiny" style="color:var(--danger)" onclick="engine.doClear(${i})">CLR</button>
                 `;
-            } else {
-                leftCtrl.innerHTML = ''; 
-            }
+            } else { leftCtrl.innerHTML = ''; }
             drawer.appendChild(leftCtrl);
 
-            const contentDiv = document.createElement('div');
-            contentDiv.style.display="contents";
-
+            const contentDiv = document.createElement('div'); contentDiv.style.display="contents";
             if (t.drawerMode === 'vel') {
                 let velHTML = `<div class="vel-grid">`;
                 const currentVels = (t.velocities && t.velocities[b]) ? t.velocities[b] : Array(32).fill(1.0);
                 for(let s=0; s<32; s++) {
                     const opacity = s >= engine.bankLengths[b] ? 0.2 : 1;
                     const h = currentVels[s] * 100;
-                    velHTML += `<div class="vel-bar-slot" style="opacity:${opacity}" 
                     velHTML += `<div class="vel-bar-slot" style="opacity:${opacity}"
                                    onmousedown="ui.handleVelInput(event, ${i}, ${s})"
                                    onmousemove="ui.handleVelInput(event, ${i}, ${s})">
                                     <div class="vel-bar-fill" style="height:${h}%"></div>
                                 </div>`;
                 }
-                velHTML += `</div>`;
-                contentDiv.innerHTML = velHTML;
+                velHTML += `</div>`; contentDiv.innerHTML = velHTML;
             } else {
                 const noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-                const blackKeys = [1, 3, 6, 8, 10]; 
+                const blackKeys = [1, 3, 6, 8, 10];
                 let rollHTML = `<div class="roll-container">`;
-                const currentNotes = (t.notes && t.notes[b]) ? t.notes[b] : Array(32).fill(0);
-                const currentPats = t.patterns[b];
-                const viewBase = t.viewOctave * 12;
-
+                const currentNotes = (t.notes && t.notes[b]) ? t.notes[b] : Array(32).fill(36);
+                const currentPats = t.patterns[b]; const viewBase = t.viewOctave * 12;
                 for(let s=0; s<32; s++) {
                     const opacity = s >= engine.bankLengths[b] ? 0.2 : 1;
                     rollHTML += `<div class="roll-col" style="opacity:${opacity}">`;
                     for (let n = 0; n < 12; n++) {
-                        const isBlack = blackKeys.includes(n);
-                        const absVal = viewBase + n;
+                        const isBlack = blackKeys.includes(n); const absVal = viewBase + n;
                         const isActive = currentPats[s] && currentNotes[s] === absVal;
-
-                        rollHTML += `<div class="roll-cell ${isBlack ? 'black-key' : ''} ${isActive ? 'active' : ''}" 
-                                        onclick="ui.setNote(${i}, ${s}, ${n})"
-                                        title="${noteNames[n]} ${t.viewOctave}"></div>`;
+                        rollHTML += `<div class="roll-cell ${isBlack ? 'black-key' : ''} ${isActive ? 'active' : ''}"
+                                         onclick="ui.setNote(${i}, ${s}, ${n})"
+                                         title="${noteNames[n]} ${t.viewOctave}"></div>`;
                     }
                     rollHTML += `</div>`;
                 }
-                rollHTML += `</div>`;
-                contentDiv.innerHTML = rollHTML;
+                rollHTML += `</div>`; contentDiv.innerHTML = rollHTML;
             }
-            drawer.appendChild(contentDiv);
-
-            wrapper.appendChild(drawer);
-            list.appendChild(wrapper);
+            drawer.appendChild(contentDiv); wrapper.appendChild(drawer); list.appendChild(wrapper);
 
             const grid = document.getElementById(`grid-${t.id}`);
             if(!t.genModes) t.genModes = Array(8).fill(false);
             for(let s=0; s<32; s++) {
-                const step = document.createElement('div');
-                const isGen = t.genModes[b];
+                const step = document.createElement('div'); const isGen = t.genModes[b];
                 step.className = `step ${t.patterns[b][s] ? 'on' : ''} ${s % 4 === 0 ? 'beat-mark' : ''} ${isGen ? 'gen-mode' : ''}`;
                 step.style.opacity = s >= engine.bankLengths[b] ? "0.1" : "1";
                 step.onclick = () => { if(s < engine.bankLengths[b]) { t.patterns[b][s] = !t.patterns[b][s]; step.classList.toggle('on'); } };
                 grid.appendChild(step);
             }
         });
-
         this.renderBanks(); this.renderSong();
     },
     renderMixer() {
@@ -705,16 +553,11 @@ const ui = {
             strip.innerHTML = `<div class="data-font" style="text-align:center; padding-bottom:5px; border-bottom:1px solid #333">CH ${i+1}</div><div class="fx-stack"></div><button onclick="this.nextElementSibling.click()">+ FX</button><input type="file" style="display:none" onchange="engine.injectFX(${i}, this.files[0])"><div class="data-font" style="margin-top:10px">VOL</div><input type="range" min="0" max="1.5" step="0.01" value="${ch.output.gain.value}" oninput="engine.mixer[${i}].output.gain.value=this.value">`;
             rack.appendChild(strip);
             const stack = strip.querySelector('.fx-stack');
-
             ch.fx.forEach((fx, idx) => {
-                const box = document.createElement('div'); 
-                box.className = 'fx-box';
-                box.draggable = true;
-
+                const box = document.createElement('div'); box.className = 'fx-box'; box.draggable = true;
                 box.ondragstart = (e) => {
                     if (!e.target.classList.contains('fx-handle')) { e.preventDefault(); return; }
-                    e.dataTransfer.setData('text/plain', JSON.stringify({ch: i, idx: idx}));
-                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', JSON.stringify({ch: i, idx: idx})); e.dataTransfer.effectAllowed = 'move';
                 };
                 box.ondragover = (e) => { e.preventDefault(); box.classList.add('drag-over'); };
                 box.ondragleave = () => { box.classList.remove('drag-over'); };
@@ -723,21 +566,13 @@ const ui = {
                     const data = JSON.parse(e.dataTransfer.getData('text/plain'));
                     if (data.ch === i) { engine.moveFX(i, data.idx, idx); }
                 };
-
-                const handle = document.createElement('div');
-                handle.className = 'fx-handle';
-                handle.innerText = ':::';
-                handle.draggable = true; 
+                const handle = document.createElement('div'); handle.className = 'fx-handle'; handle.innerText = ':::'; handle.draggable = true;
                 handle.ondragstart = (e) => {
                     e.dataTransfer.setData('text/plain', JSON.stringify({ch: i, idx: idx}));
-                    e.dataTransfer.effectAllowed = 'move';
-                    e.dataTransfer.setDragImage(box, 20, 20); 
+                    e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setDragImage(box, 20, 20);
                 };
                 box.appendChild(handle);
-
-                const content = document.createElement('div');
-                box.appendChild(content);
-
+                const content = document.createElement('div'); box.appendChild(content);
                 if(fx.renderUI) fx.renderUI(content, () => engine.removeFX(i, idx));
                 stack.appendChild(box);
             });
@@ -746,7 +581,7 @@ const ui = {
     async loadSmp(id, el) {
         engine.initChannels();
         const tr = engine.tracks.find(t => t.id === id);
-        const file = el.files[0]; if(!file) return;
+        const file = el.files[0]; if(!file || !tr) return;
         tr.fileName = file.name.substring(0, 10);
         const ab = await file.arrayBuffer();
         tr.buffer = await engine.ctx.decodeAudioData(ab);
@@ -771,7 +606,7 @@ const ui = {
         }
     },
     renderSong() {
-        const cont = document.getElementById('song-cells'); if(!cont) return; 
+        const cont = document.getElementById('song-cells'); if(!cont) return;
         cont.innerHTML = '';
         engine.song.forEach((bank, idx) => {
             const cell = document.createElement('button'); cell.innerText = bank + 1;
@@ -785,24 +620,21 @@ const ui = {
 const io = {
     async exportSession() {
         engine.initChannels();
-        const zip = new JSZip();
-        const samplesFolder = zip.folder("samples");
+        const zip = new JSZip(); const samplesFolder = zip.folder("samples");
         const tracksMeta = engine.tracks.map(t => ({
-            id: t.id, bus: t.bus, patterns: t.patterns, velocities: t.velocities, notes: t.notes, viewOctave: t.viewOctave, transpose: t.transpose, genModes: t.genModes, mute: t.mute, solo: t.solo, fileName: t.fileName, hasSample: !!t.buffer 
+            id: t.id, bus: t.bus, patterns: t.patterns, velocities: t.velocities, notes: t.notes, viewOctave: t.viewOctave, transpose: t.transpose, genModes: t.genModes, mute: t.mute, solo: t.solo, fileName: t.fileName, hasSample: !!t.buffer
         }));
-        engine.tracks.forEach(t => { if (t.buffer) samplesFolder.file(`${t.id}.wav`, audioUtils.bufferToWav(t.buffer)); });
+        
+        for (const t of engine.tracks) {
+            if (t.buffer) {
+                const wavBlob = audioUtils.bufferToWav(t.buffer);
+                samplesFolder.file(`${t.id}.wav`, wavBlob);
+            }
+        }
+        
         const mixerData = engine.mixer.map(m => ({ gain: m.output.gain.value, fxData: m.fx.map(f => ({ code: f._sourceCode || "", state: (f.getState) ? f.getState() : null })) }));
-
-        // --- SAVE MODE AS 'ui.mode' ---
-        const projectData = { 
-            version: "9.3", 
-            bpm: engine.bpm, 
-            bankLengths: engine.bankLengths, 
-            song: engine.song, 
-            swing: engine.swing, 
-            mode: ui.mode,  // SAVE CURRENT MODE
-            tracks: tracksMeta, 
-            mixer: mixerData 
+        const projectData = {
+            version: "9.7", bpm: engine.bpm, bankLengths: engine.bankLengths, song: engine.song, swing: engine.swing, mode: ui.mode, tracks: tracksMeta, mixer: mixerData
         };
         zip.file("project.json", JSON.stringify(projectData));
         const blob = await zip.generateAsync({type:"blob"});
@@ -817,34 +649,35 @@ const io = {
             const jsonStr = await zip.file("project.json").async("string");
             const data = JSON.parse(jsonStr);
             engine.bpm = data.bpm || 120; engine.bankLengths = data.bankLengths || Array(8).fill(16); engine.song = data.song || [0]; engine.swing = data.swing || 0;
-
-            // --- LOAD MODE AND UPDATE UI ---
-            ui.mode = data.mode || 'pattern'; 
+            ui.mode = data.mode || 'pattern';
+            
+            engine.bank = 0;
+            engine.step = 0;
+            engine.songIdx = 0;
+            
             document.getElementById('modeBtn').innerText = (ui.mode === 'pattern') ? 'PAT' : 'SONG';
-
-            // --- UPDATE TOP BAR CONTROLS ---
             if(document.getElementById('bpm-sl')) document.getElementById('bpm-sl').value = engine.bpm;
             if(document.getElementById('swing-sl')) document.getElementById('swing-sl').value = engine.swing;
-            // Master gain is inside mixer array, we can update slider if we assume default structure or first load
-            // But since master is global engine var, lets update slider:
-            if(document.getElementById('master-sl') && engine.master) document.getElementById('master-sl').value = engine.master.gain.value; 
+            if(document.getElementById('master-sl') && engine.master) document.getElementById('master-sl').value = engine.master.gain.value;
 
-            engine.tracks = []; 
+            engine.tracks = [];
             for (const tMeta of data.tracks) {
                 let newBuffer = null;
                 if (tMeta.hasSample) {
                     const sampleFile = zip.file(`samples/${tMeta.id}.wav`);
-                    if (sampleFile) { const arrayBuffer = await sampleFile.async("arraybuffer"); newBuffer = await engine.ctx.decodeAudioData(arrayBuffer); }
+                    if (sampleFile) { 
+                        const arrayBuffer = await sampleFile.async("arraybuffer"); 
+                        newBuffer = await engine.ctx.decodeAudioData(arrayBuffer); 
+                    }
                 }
                 engine.tracks.push({
                     id: tMeta.id, bus: tMeta.bus, patterns: tMeta.patterns, fileName: tMeta.fileName, buffer: newBuffer, activeSource: null, gainNode: null,
                     velocities: tMeta.velocities || Array.from({length:8}, () => Array(32).fill(1.0)),
-                    notes: tMeta.notes || Array.from({length:8}, () => Array(32).fill(36)), 
-                    viewOctave: tMeta.viewOctave || 3,
-                    transpose: tMeta.transpose || 0,
+                    // Reverted import fallback back to 36 and view octave 3
+                    notes: tMeta.notes || Array.from({length:8}, () => Array(32).fill(36)),
+                    viewOctave: (tMeta.viewOctave !== undefined) ? tMeta.viewOctave : 3, transpose: tMeta.transpose || 0,
                     genModes: Array.isArray(tMeta.genModes) ? tMeta.genModes : Array(8).fill(!!tMeta.genMode),
-                    mute: !!tMeta.mute, solo: !!tMeta.solo,
-                    drawerOpen: false, drawerMode: 'vel'
+                    mute: !!tMeta.mute, solo: !!tMeta.solo, drawerOpen: false, drawerMode: 'vel'
                 });
             }
             engine.mixer.forEach(m => { m.fx = []; m.output.gain.value = 1; });
@@ -865,8 +698,9 @@ const io = {
     }
 };
 
-engine.initChannels(); for(let i=0;i<4;i++) engine.addTrack();
+// --- INITIALIZE ENGINE & DEFAULT TO EXACTLY 1 TRACK ---
+engine.initChannels();
+engine.addTrack();
 </script>
 </body>
 </html>
- 
