@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cool Tools Pro - 4-Track Canvas Engine</title>
+<title>Cool Tools Pro - 4-Track Canvas Engine v13.3 (Live Mixdown Edition)</title>
 <style>
   body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #050608; }
   canvas { display: block; touch-action: none; }
@@ -15,8 +15,8 @@
 
 <script>
 /**
- * PURE CANVAS 4-TRACK ENGINE v12.9 (Direct USB 1-to-1 Edition)
- * Feature: Removed Latency Compensation Stepper & Enabled Direct Class-Compliant USB Capture
+ * PURE CANVAS 4-TRACK ENGINE v13.3 (Live Mixdown Resampler Edition)
+ * Features: Direct USB Capture, Granular Stretch, Wave Splitting, Live Mixdown Resampling, Sharp 90° UI
  */
 
 const canvas = document.getElementById('app');
@@ -25,7 +25,7 @@ const ctx = canvas.getContext('2d', { alpha: false });
 let width, height;
 const TOTAL_DURATION = 300; 
 let audioCtx;
-let isPlaying = false, isRecording = false, isMixing = false, isSaving = false, isLoading = false;
+let isPlaying = false, isRecording = false, isSaving = false, isLoading = false;
 let isMixerView = false, isShiftEnabled = false; 
 let globalStretchMode = 'TAPE'; // 'TAPE' or 'GRAN'
 let workletLoaded = false;
@@ -37,6 +37,16 @@ let viewOffsetX = 0, zoomLevel = 40;
 const MIN_ZOOM = 5, MAX_ZOOM = 300;
 
 let mediaRecorder, audioChunks = [], audioStream, currentRecordStartTime = 0;
+
+// Live Mixdown Resampler State
+let mixdownStreamNode = null;
+let mixdownRecorder = null;
+let mixdownChunks = [];
+let mixdownBuffer = null;
+let isMixdownArmed = false;
+let isMixdownRecording = false;
+let isMixdownPlaying = false;
+let mixdownSourceNode = null;
 
 let analyserNode, liveDataArray;
 let masterBusNode, masterGainNode, masterAnalyserNode, masterDataArray, masterVuLevel = 0;
@@ -110,13 +120,67 @@ colorPicker.addEventListener('input', (e) => {
   if (activeColorTrackId) { const track = tracks.find(t => t.id === activeColorTrackId); if (track) { track.color = e.target.value; needsRender = true; } }
 });
 
+// Clip Splitting Engine
+function splitClip(clip, splitTime) {
+  if (splitTime <= clip.startTime + 0.05 || splitTime >= clip.startTime + clip.trimDuration - 0.05) {
+    return false;
+  }
+
+  saveState();
+  const track = tracks.find(t => t.id === clip.trackId);
+  if (!track) return false;
+
+  const timeIntoClip = splitTime - clip.startTime;
+  const pbRate = clip.playbackRate || 1.0;
+  const bufferOffsetDelta = timeIntoClip * pbRate;
+
+  const rightClip = {
+    id: generateUUID(),
+    trackId: clip.trackId,
+    buffer: clip.buffer,
+    peaks: clip.peaks,
+    startTime: splitTime,
+    startOffset: (clip.startOffset || 0) + bufferOffsetDelta,
+    trimDuration: clip.trimDuration - timeIntoClip,
+    playbackRate: pbRate,
+    sourceNode: null,
+    envNode: null
+  };
+
+  clip.trimDuration = timeIntoClip;
+  track.clips.push(rightClip);
+
+  if (isPlaying) {
+    stopAudio();
+    playAudio();
+  }
+
+  needsRender = true;
+  return true;
+}
+
 // Keyboard Transport, Modifiers & Group Sync Editing
 window.addEventListener('keydown', (e) => { 
     if (e.code === 'Space' && document.activeElement === document.body) {
         e.preventDefault();
-        if (isPlaying) stopAudio(); else playAudio();
+        if (isPlaying || isMixdownPlaying) stopAudio(); else playAudio();
     }
     if (e.key === 'Shift') { isShiftEnabled = true; needsRender = true; } 
+    if (e.key === 's' || e.key === 'S') {
+        if (selectedClip) {
+            splitClip(selectedClip, playheadTime);
+        } else {
+            let splitAny = false;
+            tracks.forEach(t => {
+                t.clips.forEach(c => {
+                    if (playheadTime > c.startTime + 0.05 && playheadTime < c.startTime + c.trimDuration - 0.05) {
+                        if (splitClip(c, playheadTime)) splitAny = true;
+                    }
+                });
+            });
+            if (splitAny) needsRender = true;
+        }
+    }
     if (e.ctrlKey || e.metaKey) {
         if (e.key === 'z' || e.key === 'Z') {
             undo();
@@ -364,9 +428,15 @@ function initAudioContext() {
     masterSlotOuts = [audioCtx.createGain(), audioCtx.createGain(), audioCtx.createGain(), audioCtx.createGain()];
     masterAnalyserNode = audioCtx.createAnalyser(); masterAnalyserNode.fftSize = 256; masterDataArray = new Uint8Array(masterAnalyserNode.frequencyBinCount);
 
+    // Live Mixdown Resampler Routing
+    mixdownStreamNode = audioCtx.createMediaStreamDestination();
+
     masterBusNode.connect(masterSlotIns[0]);
     for(let i=0; i<3; i++) masterSlotOuts[i].connect(masterSlotIns[i+1]);
-    masterSlotOuts[3].connect(masterGainNode); masterGainNode.connect(masterAnalyserNode); masterAnalyserNode.connect(audioCtx.destination);
+    masterSlotOuts[3].connect(masterGainNode); 
+    masterGainNode.connect(masterAnalyserNode); 
+    masterGainNode.connect(mixdownStreamNode); // Tap master post-fader for clean resampling
+    masterAnalyserNode.connect(audioCtx.destination);
 
     tracks.forEach(track => {
       track.inputNode = audioCtx.createGain(); track.gainNode = audioCtx.createGain(); track.gainNode.gain.value = track.volume;
@@ -452,9 +522,7 @@ async function saveSession() {
     const trackData = { id: t.id, color: t.color, armed: t.armed, volume: t.volume, reverb: t.reverb, plugins: t.plugins, pluginParams: t.pluginParams, clips: [] };
     for (const c of t.clips) {
       if (!c.buffer) continue;
-      
       await new Promise(r => setTimeout(r, 10));
-      
       const wavBlob = audioBufferToWav(c.buffer);
       trackData.clips.push({ id: c.id, startTime: c.startTime, startOffset: c.startOffset || 0, trimDuration: c.trimDuration, playbackRate: c.playbackRate || 1.0, audioData: await blobToBase64(wavBlob) });
     }
@@ -464,14 +532,10 @@ async function saveSession() {
   const jsonString = JSON.stringify(project);
   const blob = new Blob([jsonString], { type: "application/json" });
   const url = URL.createObjectURL(blob);
-  
   const a = document.createElement('a');
   a.setAttribute("href", url); 
   a.setAttribute("download", `groovebox_${currentBPM}bpm.json`);
-  document.body.appendChild(a); 
-  a.click(); 
-  document.body.removeChild(a); 
-  
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); 
   URL.revokeObjectURL(url);
   isSaving = false; needsRender = true;
 }
@@ -501,78 +565,6 @@ sessionInput.onchange = async (e) => {
   e.target.value = ''; isLoading = false; needsRender = true;
 };
 
-async function exportMixdown() {
-  if (isMixing) return; initAudioContext();
-  let maxEndTime = 0;
-  tracks.forEach(track => track.clips.forEach(clip => { if (clip.startTime + clip.trimDuration > maxEndTime) maxEndTime = clip.startTime + clip.trimDuration; }));
-  if (maxEndTime === 0) return alert("Project is empty.");
-
-  isMixing = true; needsRender = true;
-  const offlineCtx = new OfflineAudioContext(2, audioCtx.sampleRate * (maxEndTime + 4.0), audioCtx.sampleRate);
-  const offlineReverbIR = generateReverbIR(3.0, 3.5, offlineCtx);
-  
-  await offlineCtx.audioWorklet.addModule(URL.createObjectURL(new Blob([granularCode], { type: 'application/javascript' })));
-
-  const offMasterBus = offlineCtx.createGain(); const offMasterGain = offlineCtx.createGain(); offMasterGain.gain.value = masterVolume;
-  const offMasterNodes = masterPlugins.map((p, i) => createPluginNode(p, offlineCtx, masterPluginParams[i]));
-  let lastOffMaster = offMasterBus;
-  offMasterNodes.forEach(pn => { if (pn) { lastOffMaster.connect(pn); lastOffMaster = pn; } });
-  lastOffMaster.connect(offMasterGain); offMasterGain.connect(offlineCtx.destination);
-
-  tracks.forEach(track => {
-    const tGain = offlineCtx.createGain(); tGain.gain.value = track.volume;
-    const tReverb = offlineCtx.createConvolver(); tReverb.buffer = offlineReverbIR;
-    const tWet = offlineCtx.createGain(); tWet.gain.value = track.reverb;
-    
-    tGain.connect(offMasterBus); tGain.connect(tReverb); tReverb.connect(tWet); tWet.connect(offMasterBus);
-    
-    track.clips.forEach(clip => {
-      if (!clip.buffer) return;
-      
-      const offNodes = track.plugins.map((p, i) => createPluginNode(p, offlineCtx, track.pluginParams[i]));
-      let lastTrackNode = null;
-      let firstTrackNode = null;
-
-      if (globalStretchMode === 'GRAN' && clip.playbackRate !== 1.0) {
-          const envNode = offlineCtx.createGain();
-          envNode.gain.value = 0;
-          envNode.gain.setValueAtTime(0, clip.startTime);
-          envNode.gain.linearRampToValueAtTime(1, clip.startTime + 0.005); 
-          envNode.gain.setValueAtTime(1, clip.startTime + clip.trimDuration - 0.005);
-          envNode.gain.linearRampToValueAtTime(0, clip.startTime + clip.trimDuration); 
-
-          const src = new AudioWorkletNode(offlineCtx, 'gran');
-          src.port.postMessage({ 
-              audioData: clip.buffer.getChannelData(0),
-              startOffset: (clip.startOffset || 0) * offlineCtx.sampleRate,
-              delayFrames: clip.startTime * offlineCtx.sampleRate
-          });
-          src.parameters.get('rate').value = clip.playbackRate || 1.0;
-          
-          src.connect(envNode);
-          firstTrackNode = envNode;
-      } else {
-          const src = offlineCtx.createBufferSource(); 
-          src.buffer = clip.buffer; 
-          src.playbackRate.value = clip.playbackRate || 1.0;
-          src.start(clip.startTime, clip.startOffset || 0, clip.trimDuration * (clip.playbackRate || 1.0));
-          firstTrackNode = src;
-      }
-
-      lastTrackNode = firstTrackNode;
-      offNodes.forEach(pn => { if(pn) { lastTrackNode.connect(pn); lastTrackNode = pn; } });
-      lastTrackNode.connect(tGain);
-    });
-  });
-
-  try {
-    const renderedBuffer = await offlineCtx.startRendering();
-    const url = URL.createObjectURL(audioBufferToWav(renderedBuffer)), a = document.createElement('a');
-    a.href = url; a.download = `mixdown_${currentBPM}bpm.wav`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-  } catch (err) { alert("Mixdown failed."); }
-  isMixing = false; needsRender = true;
-}
-
 fileInput.onchange = async (e) => {
   const file = e.target.files[0]; if (!file || !activeLoadTrackId) return;
   initAudioContext(); saveState();
@@ -599,7 +591,6 @@ function scheduleClips() {
       const playDurationBuffer = playDurationTimeline * clip.playbackRate;
 
       if (playDurationTimeline > 0 && readOffsetBuffer < clip.buffer.duration) {
-          
           if (globalStretchMode === 'GRAN' && clip.playbackRate !== 1.0 && workletLoaded) {
               clip.envNode = audioCtx.createGain();
               clip.envNode.gain.value = 0; 
@@ -630,10 +621,53 @@ function scheduleClips() {
   });
 }
 
-function playAudio() { initAudioContext(); if (isPlaying) return; isPlaying = true; needsRender = true; lastDrawTime = audioCtx.currentTime; scheduleClips(); }
+function startMixdownRecording() {
+  if (!mixdownStreamNode) return;
+  mixdownChunks = [];
+  mixdownRecorder = new MediaRecorder(mixdownStreamNode.stream);
+  mixdownRecorder.ondataavailable = e => { if (e.data.size > 0) mixdownChunks.push(e.data); };
+  mixdownRecorder.onstop = async () => {
+    try {
+      const blob = new Blob(mixdownChunks, { type: mixdownRecorder.mimeType || 'audio/webm' });
+      const arrayBuf = await blob.arrayBuffer();
+      mixdownBuffer = await audioCtx.decodeAudioData(arrayBuf);
+    } catch(err) {
+      console.error("Mixdown resample failed:", err);
+    }
+    isMixdownRecording = false;
+    isMixdownArmed = false;
+    needsRender = true;
+  };
+  isMixdownRecording = true;
+  isMixdownArmed = false;
+  mixdownRecorder.start();
+  needsRender = true;
+}
+
+function playAudio() { 
+  initAudioContext(); 
+  if (isMixdownPlaying && mixdownSourceNode) {
+      try { mixdownSourceNode.stop(); } catch(e){}
+      mixdownSourceNode.disconnect(); mixdownSourceNode = null;
+      isMixdownPlaying = false;
+  }
+  if (isPlaying) return; 
+  isPlaying = true; 
+  needsRender = true; 
+  lastDrawTime = audioCtx.currentTime; 
+  if (isMixdownArmed) startMixdownRecording();
+  scheduleClips(); 
+}
+
 function stopAudio() {
   isPlaying = false; isRecording = false; needsRender = true;
   if (mediaRecorder && mediaRecorder.state === "recording") mediaRecorder.stop();
+  if (mixdownRecorder && mixdownRecorder.state === "recording") mixdownRecorder.stop();
+  if (isMixdownPlaying && mixdownSourceNode) {
+      try { mixdownSourceNode.stop(); } catch(e){}
+      mixdownSourceNode.disconnect(); mixdownSourceNode = null;
+      isMixdownPlaying = false;
+  }
   tracks.forEach(track => track.clips.forEach(clip => { 
       if (clip.sourceNode) { try { clip.sourceNode.stop(); } catch(e) {} clip.sourceNode.disconnect(); clip.sourceNode = null; } 
       if (clip.envNode) { clip.envNode.disconnect(); clip.envNode = null; }
@@ -672,15 +706,8 @@ async function recordAudio() {
 }
 
 async function startActualRecording(armedTrack) {
-  // Direct class-compliant USB interface recording with 1-to-1 zero latency target
   if (!audioStream) audioStream = await navigator.mediaDevices.getUserMedia({ 
-      audio: { 
-          echoCancellation: false, 
-          noiseSuppression: false, 
-          autoGainControl: false, 
-          latency: 0, 
-          sampleRate: 48000 
-      } 
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, latency: 0, sampleRate: 48000 } 
   });
   analyserNode = audioCtx.createAnalyser(); analyserNode.fftSize = 256; liveDataArray = new Uint8Array(analyserNode.frequencyBinCount);
   audioCtx.createMediaStreamSource(audioStream).connect(analyserNode);
@@ -697,30 +724,31 @@ async function startActualRecording(armedTrack) {
   isRecording = true; needsRender = true; playAudio(); mediaRecorder.start();
 }
 
-function drawRect(x, y, w, h, radius, fill) { ctx.beginPath(); ctx.roundRect(x, y, w, h, radius); if (fill) { ctx.fillStyle = fill; ctx.fill(); } }
-function drawPanelBacking(x, y, w, h) { ctx.fillStyle = '#0b0c0f'; drawRect(x, y, w, h, 6, '#0b0c0f'); ctx.lineWidth = 1; ctx.strokeStyle = '#000000'; ctx.beginPath(); ctx.moveTo(x, y+h); ctx.lineTo(x, y); ctx.lineTo(x+w, y); ctx.stroke(); ctx.strokeStyle = '#1a1c22'; ctx.beginPath(); ctx.moveTo(x, y+h); ctx.lineTo(x+w, y+h); ctx.lineTo(x+w, y); ctx.stroke(); }
+// SHARP 90-DEGREE SQUARED-OFF DRAWING API
+function drawRect(x, y, w, h, radius, fill) { ctx.beginPath(); ctx.roundRect(x, y, w, h, 0); if (fill) { ctx.fillStyle = fill; ctx.fill(); } }
+function drawPanelBacking(x, y, w, h) { ctx.fillStyle = '#0b0c0f'; drawRect(x, y, w, h, 0, '#0b0c0f'); ctx.lineWidth = 1; ctx.strokeStyle = '#000000'; ctx.beginPath(); ctx.moveTo(x, y+h); ctx.lineTo(x, y); ctx.lineTo(x+w, y); ctx.stroke(); ctx.strokeStyle = '#1a1c22'; ctx.beginPath(); ctx.moveTo(x, y+h); ctx.lineTo(x+w, y+h); ctx.lineTo(x+w, y); ctx.stroke(); }
 function drawSquareButton(id, x, y, w, h, text, isActive, colorStr) {
   activeButtons[id] = { x, y, w, h }; const isHover = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h; const isPressed = (isHover && window.mouseIsDown) || isActive;
-  ctx.save(); ctx.beginPath(); ctx.roundRect(x, y, w, h, 4); ctx.fillStyle = isPressed ? '#17181a' : '#26282b'; ctx.fill(); ctx.lineWidth = 1; ctx.strokeStyle = '#050506'; ctx.stroke();
-  if (!isPressed) { ctx.beginPath(); ctx.roundRect(x+1, y+1, w-2, h-2, 3); ctx.strokeStyle = '#323438'; ctx.stroke(); }
+  ctx.save(); ctx.beginPath(); ctx.roundRect(x, y, w, h, 0); ctx.fillStyle = isPressed ? '#17181a' : '#26282b'; ctx.fill(); ctx.lineWidth = 1; ctx.strokeStyle = '#050506'; ctx.stroke();
+  if (!isPressed) { ctx.beginPath(); ctx.roundRect(x+1, y+1, w-2, h-2, 0); ctx.strokeStyle = '#323438'; ctx.stroke(); }
   if (isActive && colorStr) { ctx.fillStyle = colorStr; ctx.shadowColor = colorStr; ctx.shadowBlur = 6; ctx.beginPath(); ctx.arc(x + 10, y + h / 2, 3, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0; }
   ctx.fillStyle = isPressed ? '#aaa' : '#ddd'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, x + w / 2 + (isActive && colorStr ? 5 : 0), y + h / 2); ctx.restore();
 }
 function drawMacroFader(id, x, y, w, h, value, color, label) {
-  activeButtons[id] = { x, y: y - 10, w, h: h + 20 }; ctx.fillStyle = '#08080a'; drawRect(x, y, w, h, 2, '#08080a'); ctx.lineWidth = 1; ctx.strokeStyle = '#000'; ctx.strokeRect(x, y, w, h);
-  ctx.fillStyle = color; ctx.shadowBlur = 4; ctx.shadowColor = color; drawRect(x+1, y+1, (value * w)-2, h-2, 1, color); ctx.shadowBlur = 0;
-  const thumbX = x + (value * w); ctx.fillStyle = '#444'; drawRect(thumbX - 6, y - 4, 12, h + 8, 2, '#444'); ctx.fillStyle = '#222'; ctx.fillRect(thumbX - 2, y + h/2 - 4, 1, 8); ctx.fillRect(thumbX + 1, y + h/2 - 4, 1, 8);
+  activeButtons[id] = { x, y: y - 10, w, h: h + 20 }; ctx.fillStyle = '#08080a'; drawRect(x, y, w, h, 0, '#08080a'); ctx.lineWidth = 1; ctx.strokeStyle = '#000'; ctx.strokeRect(x, y, w, h);
+  ctx.fillStyle = color; ctx.shadowBlur = 4; ctx.shadowColor = color; drawRect(x+1, y+1, (value * w)-2, h-2, 0, color); ctx.shadowBlur = 0;
+  const thumbX = x + (value * w); ctx.fillStyle = '#444'; drawRect(thumbX - 6, y - 4, 12, h + 8, 0, '#444'); ctx.fillStyle = '#222'; ctx.fillRect(thumbX - 2, y + h/2 - 4, 1, 8); ctx.fillRect(thumbX + 1, y + h/2 - 4, 1, 8);
   ctx.fillStyle = '#888'; ctx.font = '9px monospace'; ctx.textAlign = 'left'; ctx.fillText(label, x, y - 4);
 }
 function drawVerticalFader(id, x, y, w, h, value, color, label) {
-  activeButtons[id] = { x: x - 10, y, w: w + 20, h }; ctx.fillStyle = '#08080a'; drawRect(x, y, w, h, 2, '#08080a'); ctx.lineWidth = 1; ctx.strokeStyle = '#000'; ctx.strokeRect(x, y, w, h);
-  const fillH = (value / 2) * h; ctx.fillStyle = color; ctx.shadowBlur = 4; ctx.shadowColor = color; drawRect(x+1, y + h - fillH + 1, w-2, fillH-2, 1, color); ctx.shadowBlur = 0;
-  const thumbY = y + h - fillH; ctx.fillStyle = '#444'; drawRect(x - 4, thumbY - 6, w + 8, 12, 2, '#444'); ctx.fillStyle = '#222'; ctx.fillRect(x + w/2 - 4, thumbY - 2, 8, 1); ctx.fillRect(x + w/2 - 4, thumbY + 1, 8, 1);
+  activeButtons[id] = { x: x - 10, y, w: w + 20, h }; ctx.fillStyle = '#08080a'; drawRect(x, y, w, h, 0, '#08080a'); ctx.lineWidth = 1; ctx.strokeStyle = '#000'; ctx.strokeRect(x, y, w, h);
+  const fillH = (value / 2) * h; ctx.fillStyle = color; ctx.shadowBlur = 4; ctx.shadowColor = color; drawRect(x+1, y + h - fillH + 1, w-2, fillH-2, 0, color); ctx.shadowBlur = 0;
+  const thumbY = y + h - fillH; ctx.fillStyle = '#444'; drawRect(x - 4, thumbY - 6, w + 8, 12, 0, '#444'); ctx.fillStyle = '#222'; ctx.fillRect(x + w/2 - 4, thumbY - 2, 8, 1); ctx.fillRect(x + w/2 - 4, thumbY + 1, 8, 1);
   ctx.fillStyle = '#888'; ctx.font = '10px monospace'; ctx.textAlign = 'center'; ctx.fillText(label, x + w/2, y + h + 15);
 }
 function drawPluginSlot(id, x, y, w, h, type) {
   const btnW = 20; activeButtons[`${id}_cycle`] = { x, y, w: w - (btnW * 2), h }; activeButtons[`${id}_load`] = { x: x + w - (btnW * 2), y, w: btnW, h }; activeButtons[`${id}_led`] = { x: x + w - btnW, y, w: btnW, h }; 
-  ctx.fillStyle = '#0d0e11'; drawRect(x, y, w, h, 4, '#0d0e11'); ctx.lineWidth = 1; ctx.strokeStyle = type !== 'NONE' ? '#888' : '#1a1c22'; ctx.strokeRect(x, y, w, h);
+  ctx.fillStyle = '#0d0e11'; drawRect(x, y, w, h, 0, '#0d0e11'); ctx.lineWidth = 1; ctx.strokeStyle = type !== 'NONE' ? '#888' : '#1a1c22'; ctx.strokeRect(x, y, w, h);
   ctx.fillStyle = type !== 'NONE' ? '#fff' : '#444'; ctx.font = '10px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   let dispTxt = type; if(dispTxt.length > 8) dispTxt = dispTxt.substring(0,7) + '.'; ctx.fillText(dispTxt, x + (w - btnW*2) / 2, y + h / 2);
   ctx.strokeStyle = '#1a1c22'; ctx.beginPath(); ctx.moveTo(x + w - btnW*2, y); ctx.lineTo(x + w - btnW*2, y + h); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x + w - btnW, y); ctx.lineTo(x + w - btnW, y + h); ctx.stroke(); ctx.fillStyle = '#888'; ctx.fillText('+', x + w - btnW*1.5, y + h / 2);
@@ -729,9 +757,19 @@ function drawPluginSlot(id, x, y, w, h, type) {
 }
 
 function render() {
-  if ((isPlaying || isRecording) && masterAnalyserNode) { masterAnalyserNode.getByteTimeDomainData(masterDataArray); let max = 0; for(let i=0; i<masterDataArray.length; i++) { const val = Math.abs(masterDataArray[i] - 128) / 128; if (val > max) max = val; } masterVuLevel = max; } else masterVuLevel *= 0.85; 
+  if ((isPlaying || isRecording || isMixdownPlaying || isMixdownRecording) && masterAnalyserNode) { 
+      masterAnalyserNode.getByteTimeDomainData(masterDataArray); 
+      let max = 0; 
+      for(let i=0; i<masterDataArray.length; i++) { 
+          const val = Math.abs(masterDataArray[i] - 128) / 128; 
+          if (val > max) max = val; 
+      } 
+      masterVuLevel = max; 
+  } else {
+      masterVuLevel *= 0.85; 
+  }
   if (masterVuLevel > 0.01) needsRender = true;
-  if (!isPlaying && !isRecording && !needsRender && !activeVstModal && !isDraggingGutter && !isDraggingSelection) { requestAnimationFrame(render); return; }
+  if (!isPlaying && !isRecording && !isMixdownPlaying && !needsRender && !activeVstModal && !isDraggingGutter && !isDraggingSelection) { requestAnimationFrame(render); return; }
   needsRender = false;
 
   ctx.fillStyle = '#050608'; ctx.fillRect(0, 0, width, height); activeButtons = {}; 
@@ -756,7 +794,7 @@ function render() {
   ctx.fillStyle = '#0b0c0e'; ctx.fillRect(0, 0, width, TOP_BAR_H); ctx.strokeStyle = '#000'; ctx.beginPath(); ctx.moveTo(0, TOP_BAR_H); ctx.lineTo(width, TOP_BAR_H); ctx.stroke();
 
   drawPanelBacking(10, 10, 360, 60);
-  drawSquareButton('play', 20, 20, 50, 40, "PLAY", isPlaying, "#00cc44");
+  drawSquareButton('play', 20, 20, 50, 40, "PLAY", isPlaying || isMixdownPlaying, "#00cc44");
   drawSquareButton('stop', 80, 20, 50, 40, "STOP", false, "");
   drawSquareButton('rec', 140, 20, 50, 40, isCountingIn ? "WAIT" : "REC", isRecording || isCountingIn, "#cc3333");
   drawSquareButton('metro', 200, 20, 55, 40, "METRO", isMetroEnabled, "#ffb800");
@@ -765,7 +803,7 @@ function render() {
   
   drawPanelBacking(380, 10, 370, 60);
   drawSquareButton('bpm_down', 390, 20, 30, 40, "<", false, "");
-  ctx.fillStyle = '#050505'; drawRect(425, 20, 70, 40, 4); ctx.fillStyle = '#ddd'; ctx.font = '14px monospace'; ctx.textAlign = 'center'; ctx.fillText(`${currentBPM} BPM`, 460, 40);
+  ctx.fillStyle = '#050505'; drawRect(425, 20, 70, 40, 0); ctx.fillStyle = '#ddd'; ctx.font = '14px monospace'; ctx.textAlign = 'center'; ctx.fillText(`${currentBPM} BPM`, 460, 40);
   drawSquareButton('bpm_up', 500, 20, 30, 40, ">", false, "");
   drawSquareButton('snap', 540, 20, 40, 40, isSnapEnabled ? "SNAP" : "FREE", isSnapEnabled, "#ffb800");
   drawSquareButton('grid', 590, 20, 40, 40, isGridEnabled ? "GRID" : "OFF", isGridEnabled, "#ffb800");
@@ -781,11 +819,16 @@ function render() {
     drawPanelBacking(masterPanelX, 10, masterPanelW, 60);
     ctx.fillStyle = '#fff'; ctx.font = 'bold 22px monospace'; ctx.textAlign = 'right'; ctx.fillText(playheadTime.toFixed(2) + 's', masterPanelX + 85, 42);
     const meterX = masterPanelX + 105, meterY = 20, meterW = 100, meterH = 40;
-    ctx.fillStyle = '#050608'; drawRect(meterX, meterY, meterW, meterH, 4, '#050608'); ctx.strokeStyle = '#111'; ctx.strokeRect(meterX, meterY, meterW, meterH);
-    const meterGrad = ctx.createLinearGradient(meterX, 0, meterX + meterW, 0); meterGrad.addColorStop(0, '#00cc44'); meterGrad.addColorStop(0.7, '#ffb800'); meterGrad.addColorStop(1, '#cc3333');
-    ctx.fillStyle = meterGrad; drawRect(meterX + 2, meterY + 2, Math.min(meterW - 4, meterW * (masterVuLevel * 2)), meterH - 4, 2, meterGrad);
+    ctx.fillStyle = '#050608'; drawRect(meterX, meterY, meterW, meterH, 0, '#050608'); ctx.strokeStyle = '#111'; ctx.strokeRect(meterX, meterY, meterW, meterH);
+    
+    const meterGrad = ctx.createLinearGradient(meterX, 0, meterX + meterW, 0); 
+    meterGrad.addColorStop(0, '#00cc44'); meterGrad.addColorStop(0.7, '#ffb800'); meterGrad.addColorStop(1, '#cc3333');
+    ctx.fillStyle = meterGrad; 
+    const fillW = Math.min(meterW - 4, meterW * (masterVuLevel * 2));
+    drawRect(meterX + 2, meterY + 2, fillW, meterH - 4, 0, meterGrad);
     ctx.fillStyle = '#050608'; for(let i=10; i<meterW; i+=10) { ctx.fillRect(meterX + i, meterY, 2, meterH); }
-    ctx.fillStyle = '#888'; ctx.font = '9px monospace'; ctx.textAlign = 'right'; ctx.fillText('MST', meterX - 6, 40);
+    ctx.fillStyle = '#888'; ctx.font = '9px monospace'; ctx.textAlign = 'right'; 
+    ctx.fillText('MST', meterX - 6, 40);
   }
 
   if (!isMixerView) {
@@ -839,7 +882,15 @@ function render() {
         activeButtons[`del_${clip.id}`] = { x: startPixel, y: trackY, w: 20, h: 20, isWorld: true }; ctx.fillStyle = '#822'; ctx.fillRect(startPixel, trackY, 20, 20); ctx.fillStyle = '#fff'; ctx.font = '10px sans-serif'; ctx.fillText('✕', startPixel + 10, trackY + 10);
         
         const dragHandleW = visibleWaveWidthPixels - 28;
-        if (dragHandleW > 10) { activeButtons[`move_${clip.id}`] = { x: startPixel + 14, y: trackY, w: dragHandleW, h: 20, isWorld: true }; ctx.fillStyle = 'rgba(255, 255, 255, 0.08)'; if (isDraggingClip && isDraggingClip.id === clip.id) ctx.fillStyle = 'rgba(255, 255, 255, 0.2)'; else if (selectedGroup.includes(clip.id) || (selectedClip && selectedClip.id === clip.id)) ctx.fillStyle = 'rgba(255, 255, 255, 0.15)'; ctx.fillRect(startPixel + 14, trackY, dragHandleW, 20); ctx.fillStyle = '#aaa'; ctx.font = '10px monospace'; ctx.fillText(clip.playbackRate !== 1.0 ? `⣿⣿ ${globalStretchMode}: ${clip.playbackRate.toFixed(2)}x` : '⣿⣿ DRAG', startPixel + 14 + dragHandleW / 2, trackY + 10); }
+        if (dragHandleW > 10) { 
+            activeButtons[`move_${clip.id}`] = { x: startPixel + 14, y: trackY, w: dragHandleW, h: 20, isWorld: true }; 
+            activeButtons[`wave_${clip.id}`] = { x: startPixel + 14, y: trackY + 20, w: dragHandleW, h: TRACK_H - 20, isWorld: true };
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.08)'; 
+            if (isDraggingClip && isDraggingClip.id === clip.id) ctx.fillStyle = 'rgba(255, 255, 255, 0.2)'; else if (selectedGroup.includes(clip.id) || (selectedClip && selectedClip.id === clip.id)) ctx.fillStyle = 'rgba(255, 255, 255, 0.15)'; 
+            ctx.fillRect(startPixel + 14, trackY, dragHandleW, 20); 
+            ctx.fillStyle = '#aaa'; ctx.font = '10px monospace'; 
+            ctx.fillText(isShiftEnabled ? '✂ SHIFT+CLICK TO SPLIT BELOW' : (clip.playbackRate !== 1.0 ? `⣿⣿ ${globalStretchMode}: ${clip.playbackRate.toFixed(2)}x` : '⣿⣿ DRAG'), startPixel + 14 + dragHandleW / 2, trackY + 10); 
+        }
         
         const trimStartX = startPixel; activeButtons[`trimL_${clip.id}`] = { x: trimStartX, y: trackY + 20, w: 14, h: TRACK_H - 20, isWorld: true }; ctx.fillStyle = 'rgba(255, 255, 255, 0.1)'; if (isDraggingTrimStart === clip.id) ctx.fillStyle = 'rgba(255, 255, 255, 0.3)'; ctx.fillRect(trimStartX, trackY, 14, TRACK_H); ctx.fillStyle = '#fff'; ctx.fillRect(trimStartX + 4, trackY + TRACK_H/2 - 10, 2, 20); ctx.fillRect(trimStartX + 8, trackY + TRACK_H/2 - 10, 2, 20); 
 
@@ -858,13 +909,8 @@ function render() {
         const wy = Math.min(selectionBox.startY, selectionBox.currentY) - TOP_BAR_H;
         const ww = Math.abs(currentWorldX - startWorldX);
         const wh = Math.abs(selectionBox.currentY - selectionBox.startY);
-        ctx.fillStyle = 'rgba(0, 204, 68, 0.15)';
-        ctx.strokeStyle = 'rgba(0, 204, 68, 0.5)';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([5, 5]);
-        ctx.fillRect(wx, wy, ww, wh);
-        ctx.strokeRect(wx, wy, ww, wh);
-        ctx.setLineDash([]);
+        ctx.fillStyle = 'rgba(0, 204, 68, 0.15)'; ctx.strokeStyle = 'rgba(0, 204, 68, 0.5)'; ctx.lineWidth = 1; ctx.setLineDash([5, 5]);
+        ctx.fillRect(wx, wy, ww, wh); ctx.strokeRect(wx, wy, ww, wh); ctx.setLineDash([]);
     }
 
     const gutterY = TIMELINE_H + (tracks.length * (TRACK_H + 10)), gutterH = 20;
@@ -878,15 +924,15 @@ function render() {
     tracks.forEach((track, i) => {
       const trackY = TOP_BAR_H + TIMELINE_H + (i * (TRACK_H + 10)); drawPanelBacking(10, trackY + 5, LEFT_PANEL_W - 20, TRACK_H - 10); 
       ctx.fillStyle = '#888'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'left'; ctx.fillText(`CH ${track.id}`, 20, trackY + 22);
-      const colorBoxX = LEFT_PANEL_W - 35, colorBoxY = trackY + 12; drawRect(colorBoxX, colorBoxY, 15, 15, 3, track.color); activeButtons[`color_${track.id}`] = { x: colorBoxX, y: colorBoxY, w: 15, h: 15 };
+      const colorBoxX = LEFT_PANEL_W - 35, colorBoxY = trackY + 12; drawRect(colorBoxX, colorBoxY, 15, 15, 0, track.color); activeButtons[`color_${track.id}`] = { x: colorBoxX, y: colorBoxY, w: 15, h: 15 };
       drawSquareButton(`arm_${track.id}`, 20, trackY + 35, 45, 22, "ARM", track.armed, "#cc3333"); drawSquareButton(`load_${track.id}`, 75, trackY + 35, 45, 22, "LOAD", false, "");
       drawMacroFader(`vol_${track.id}`, 20, trackY + 72, 140, 8, track.volume / 2, '#ccc', 'VOL'); drawMacroFader(`rev_${track.id}`, 20, trackY + 95, 140, 8, track.reverb, '#888', 'REV');
     });
 
     const scrollbarTrackW = width - LEFT_PANEL_W, scrollbarTrackY = height - SCROLLBAR_H; ctx.fillStyle = '#050608'; ctx.fillRect(LEFT_PANEL_W, scrollbarTrackY, scrollbarTrackW, SCROLLBAR_H);
     const totalWorldW = TOTAL_DURATION * zoomLevel, visibleWorldW = width - LEFT_PANEL_W;
-    if (totalWorldW > visibleWorldW) { const thumbW = Math.max(30, (visibleWorldW / totalWorldW) * scrollbarTrackW), thumbX = LEFT_PANEL_W + (viewOffsetX / (totalWorldW - visibleWorldW)) * (scrollbarTrackW - thumbW); drawRect(thumbX, scrollbarTrackY + 2, thumbW, SCROLLBAR_H - 4, 3, isDraggingScrollbar ? '#555' : '#222'); activeButtons['scrollbar_thumb'] = { x: thumbX, y: scrollbarTrackY, w: thumbW, h: SCROLLBAR_H }; activeButtons['scrollbar_track'] = { x: LEFT_PANEL_W, y: scrollbarTrackY, w: scrollbarTrackW, h: SCROLLBAR_H }; }
-   
+    if (totalWorldW > visibleWorldW) { const thumbW = Math.max(30, (visibleWorldW / totalWorldW) * scrollbarTrackW), thumbX = LEFT_PANEL_W + (viewOffsetX / (totalWorldW - visibleWorldW)) * (scrollbarTrackW - thumbW); drawRect(thumbX, scrollbarTrackY + 2, thumbW, SCROLLBAR_H - 4, 0, isDraggingScrollbar ? '#555' : '#222'); activeButtons['scrollbar_thumb'] = { x: thumbX, y: scrollbarTrackY, w: thumbW, h: SCROLLBAR_H }; activeButtons['scrollbar_track'] = { x: LEFT_PANEL_W, y: scrollbarTrackY, w: scrollbarTrackW, h: SCROLLBAR_H }; }
+    
   } else {
     const stripWidth = Math.floor(width / 6), startY = TOP_BAR_H + 20, stripHeight = height - startY - 20;
 
@@ -894,13 +940,23 @@ function render() {
         const x = 20 + (i * stripWidth); drawPanelBacking(x, startY, stripWidth - 20, stripHeight);
         ctx.fillStyle = track.color; ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center'; ctx.fillText(`CH ${track.id}`, x + (stripWidth-20)/2, startY + 20); ctx.fillStyle = '#888'; ctx.font = '10px monospace'; ctx.fillText(`FX RACK`, x + (stripWidth-20)/2, startY + 45);
         for(let j=0; j<4; j++) drawPluginSlot(`plug_${track.id}_${j}`, x + 10, startY + 60 + (j * 32), stripWidth - 40, 25, track.plugins[j]);
-        drawVerticalFader(`mixvol_${track.id}`, x + (stripWidth-20)/2 - 10, startY + 200, 20, stripHeight - 240, track.volume, track.color, 'VOL');
+        drawVerticalFader(`mixvol_${track.id}`, x + (stripWidth-20)/2 - 10, startY + 200, 20, stripHeight - 280, track.volume, track.color, 'VOL');
     });
 
     const mX = 20 + (4 * stripWidth); drawPanelBacking(mX, startY, stripWidth - 20, stripHeight);
     ctx.fillStyle = '#cc3333'; ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center'; ctx.fillText(`MASTER BUS`, mX + (stripWidth-20)/2, startY + 20); ctx.fillStyle = '#888'; ctx.font = '10px monospace'; ctx.fillText(`GLOBAL FX`, mX + (stripWidth-20)/2, startY + 45);
     for(let j=0; j<4; j++) drawPluginSlot(`mplog_${j}`, mX + 10, startY + 60 + (j * 32), stripWidth - 40, 25, masterPlugins[j]);
-    drawSquareButton('mixdown', mX + 10, startY + 200, stripWidth - 40, 30, isMixing ? "MIXING" : "BOUNCE", isMixing, "#ffb800"); drawVerticalFader(`master_vol`, mX + (stripWidth-20)/2 - 10, startY + 250, 20, stripHeight - 290, masterVolume, '#cc3333', 'MASTER');
+    drawVerticalFader(`master_vol`, mX + (stripWidth-20)/2 - 10, startY + 200, 20, stripHeight - 280, masterVolume, '#cc3333', 'MASTER');
+    
+    // Live Mixdown Resampler UI Controls
+    const ctrlY = startY + stripHeight - 65;
+    drawSquareButton('mixdown_rec', mX + 10, ctrlY, stripWidth - 40, 25, isMixdownRecording ? "REC..." : (isMixdownArmed ? "ARMED (DAW)" : "REC MIX"), isMixdownArmed || isMixdownRecording, "#cc3333");
+    
+    if (mixdownBuffer) {
+        const halfW = ((stripWidth - 40) - 6) / 2;
+        drawSquareButton('mixdown_preview', mX + 10, ctrlY + 30, halfW, 25, isMixdownPlaying ? "STOP" : "PREVIEW", isMixdownPlaying, "#00cc44");
+        drawSquareButton('mixdown_export', mX + 16 + halfW, ctrlY + 30, halfW, 25, "EXPORT", false, "#ffb800");
+    }
   }
 
   if (activeVstModal) {
@@ -938,13 +994,55 @@ window.addEventListener('mousedown', (e) => {
 
       if (id === 'play') playAudio(); if (id === 'stop') stopAudio(); if (id === 'rec') recordAudio(); 
       if (id === 'metro') { isMetroEnabled = !isMetroEnabled; needsRender = true; return; }
-      if (id === 'mixdown') exportMixdown(); if (id === 'save_sesh') saveSession(); if (id === 'load_sesh') sessionInput.click();
+      if (id === 'save_sesh') saveSession(); if (id === 'load_sesh') sessionInput.click();
       if (id === 'snap') isSnapEnabled = !isSnapEnabled; if (id === 'grid') isGridEnabled = !isGridEnabled;
       if (id === 'shift') { isShiftEnabled = !isShiftEnabled; return; } 
       if (id === 'stretch_mode') { globalStretchMode = globalStretchMode === 'TAPE' ? 'GRAN' : 'TAPE'; needsRender = true; return; }
       if (id === 'toggle_view') isMixerView = !isMixerView;
       if (id === 'loop') { isLoopEnabled = !isLoopEnabled; if (isLoopEnabled && playheadTime > loopEnd) playheadTime = loopStart; }
       if (id === 'bpm_down' || id === 'bpm_up') { const step = () => { currentBPM = id === 'bpm_down' ? Math.max(40, currentBPM - 1) : Math.min(300, currentBPM + 1); loopEnd = loopStart + (60 / currentBPM) * 4; needsRender = true; }; step(); bpmHoldTimeout = setTimeout(() => { bpmHoldInterval = setInterval(step, 50); }, 400); }
+
+      // Live Mixdown Resampler Handlers
+      if (id === 'mixdown_rec') {
+          if (isMixdownRecording) {
+              stopAudio();
+          } else if (isPlaying) {
+              startMixdownRecording();
+          } else {
+              isMixdownArmed = !isMixdownArmed;
+              if (isMixdownArmed) mixdownBuffer = null;
+          }
+          needsRender = true;
+          return;
+      }
+      if (id === 'mixdown_preview') {
+          if (isMixdownPlaying) {
+              stopAudio();
+          } else if (mixdownBuffer) {
+              initAudioContext();
+              if (isPlaying) stopAudio();
+              mixdownSourceNode = audioCtx.createBufferSource();
+              mixdownSourceNode.buffer = mixdownBuffer;
+              mixdownSourceNode.connect(masterAnalyserNode);
+              mixdownSourceNode.onended = () => { isMixdownPlaying = false; needsRender = true; };
+              mixdownSourceNode.start();
+              isMixdownPlaying = true;
+          }
+          needsRender = true;
+          return;
+      }
+      if (id === 'mixdown_export') {
+          if (mixdownBuffer) {
+              const wavBlob = audioBufferToWav(mixdownBuffer);
+              const url = URL.createObjectURL(wavBlob);
+              const a = document.createElement('a');
+              a.setAttribute("href", url);
+              a.setAttribute("download", `CoolTools_Mixdown_${currentBPM}BPM.wav`);
+              document.body.appendChild(a); a.click(); document.body.removeChild(a);
+              URL.revokeObjectURL(url);
+          }
+          return;
+      }
 
       if (id === 'gutter') {
           isDraggingGutter = true;
@@ -994,6 +1092,34 @@ window.addEventListener('mousedown', (e) => {
             if (isShiftEnabled) isDraggingStretch = cId;
             else isDraggingTrim = cId; 
             return; 
+        }
+        if (id.startsWith('wave_')) {
+            const cId = id.split('_')[1];
+            const result = findClipById(cId);
+            if (result) {
+                if (isShiftEnabled || e.shiftKey) {
+                    const clickWorldX = (mouseX - LEFT_PANEL_W + viewOffsetX) / zoomLevel;
+                    const splitTime = getSnappedTime(clickWorldX);
+                    if (splitTime <= result.clip.startTime + 0.05 || splitTime >= result.clip.startTime + result.clip.trimDuration - 0.05) {
+                        splitClip(result.clip, clickWorldX);
+                    } else {
+                        splitClip(result.clip, splitTime);
+                    }
+                } else {
+                    isDraggingClip = result.clip;
+                    selectedClip = result.clip;
+                    clipDragOffsetTime = ((mouseX - LEFT_PANEL_W + viewOffsetX) / zoomLevel) - result.clip.startTime;
+                    if (!selectedGroup.includes(cId)) {
+                        selectedGroup = [cId];
+                    }
+                    window.groupDragOffsets = {};
+                    selectedGroup.forEach(gId => {
+                        const gClip = findClipById(gId);
+                        if(gClip) window.groupDragOffsets[gId] = ((mouseX - LEFT_PANEL_W + viewOffsetX) / zoomLevel) - gClip.clip.startTime;
+                    });
+                }
+            }
+            return;
         }
         if (id.startsWith('move_')) { 
             saveState();
