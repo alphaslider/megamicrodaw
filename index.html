@@ -2,64 +2,128 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MEGAMICRODAW // v9.7_FIXED</title>
+    <title>MEGAMICRODAW // v10.1_STEPPER_ROUTING</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <link href="https://fonts.cdnfonts.com/css/vcr-osd-mono" rel="stylesheet">
     <style>
         :root {
-            --bg: #050a10; --panel: #0b1118; --surface: #10161e; --border: #1f2a36;
-            --text: #5f7d8c; --text-bright: #00d2d3; --accent: #00d2d3; --accent-dim: #008c8d;
+            --bg: #0d0d0d; --panel: #141414; --surface: #1a1a1a; --border: #2a2a2a;
+            --text: #888888; --text-bright: #00d2d3; --accent: #00d2d3; --accent-dim: #008c8d;
             --accent-glow: rgba(0, 210, 211, 0.3); --danger: #ff4757; --rec: #ff4757;
-            --warn: #e67e22; --good: #2ecc71; --step-off: #151b24; --step-on: #00d2d3;
-            --step-gen: #9b59b6; --playhead-color: #fff; --btn-bg: #151b24; --btn-hover: #1e2733;
+            --warn: #e67e22; --good: #2ecc71; --step-off: #222222; --step-on: #00d2d3;
+            --step-gen: #9b59b6; --playhead-color: #fff; --btn-bg: #1a1a1a; --btn-hover: #252525;
             --main-font: 'VCR OSD Mono', 'Courier New', monospace;
         }
-        html, body { height: 100%; overflow: hidden; background: #000; color: var(--text); font-family: var(--main-font); text-transform: uppercase; margin: 0; padding: 0; user-select: none; font-size: 13px; }
+        
+        html, body { 
+            height: 100%; 
+            overflow: hidden; 
+            background: #0a0a0a; 
+            color: var(--text); 
+            font-family: var(--main-font); 
+            text-transform: uppercase; 
+            margin: 0; 
+            padding: 0; 
+            font-size: 13px; 
+        }
+
+        /* Protect UI interactions from highlighting */
+        button, .step, .roll-cell, .vel-bar-slot, .fx-handle, .playhead-slot, .track-label, .drawer-ctrl {
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
         #chassis { display: flex; flex-direction: column; height: 100vh; width: 100vw; background: var(--bg); padding: 10px; box-sizing: border-box; gap: 10px; }
-        .panel { border: 1px solid var(--border); background: var(--panel); box-shadow: 0 0 10px rgba(0,0,0,0.5); flex-shrink: 0; }
+        .panel { border: 1px solid var(--border); background: var(--panel); box-shadow: 0 0 10px rgba(0,0,0,0.5); flex-shrink: 0; border-radius: 0; }
+        
         #top-bar { padding: 10px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--border); }
         #page-seq { display: flex; flex-direction: column; flex-grow: 1; min-height: 0; gap: 10px; }
         #bank-nav { padding: 5px; display: flex; gap: 2px; background: var(--surface); border: 1px solid var(--border); }
-        #track-rack-container { display: flex; flex-direction: column; flex-grow: 1; min-height: 0; background: var(--surface); border: 1px solid var(--border); }
-        #track-toolbar { padding: 5px 10px; background: #0e131a; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
-        #timeline-header { display: grid; grid-template-columns: 100px 1fr 80px 30px; gap: 8px; padding: 5px; padding-bottom: 10px; background: #0e131a; border-bottom: 1px solid var(--border); align-items: end; }
-        .track-wrapper { margin-bottom: 2px; background: #0e131a; padding: 4px; border-bottom: 1px solid var(--border); }
-        .track-row { display: grid; grid-template-columns: 100px 1fr 80px 30px; gap: 8px; align-items: center; }
-        .drawer { display: none; grid-template-columns: 100px 1fr 80px 30px; gap: 8px; margin-top: 5px; padding-top: 5px; border-top: 1px dashed var(--border); background: #080c12; }
+        #track-rack-container { display: flex; flex-direction: column; flex-grow: 1; min-height: 0; background: var(--surface); border: 1px solid var(--border); position: relative; }
+        
+        #track-toolbar { padding: 5px 10px; background: var(--panel); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; z-index: 300; }
+        
+        /* ALIGNMENT FIX: Scroll area houses both header and tracks so they share the exact same width bounds */
+        #tracks-scroll-area { flex-grow: 1; overflow-y: auto; overflow-x: hidden; padding: 0; background: #0a0a0a; position: relative; } 
+        #tracks-scroll-area::-webkit-scrollbar { width: 8px; } 
+        #tracks-scroll-area::-webkit-scrollbar-track { background: #0a0a0a; } 
+        #tracks-scroll-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 0; }
+        
+        /* ALIGNMENT FIX: Sticky header inside the scroll area */
+        #timeline-header { 
+            display: grid; 
+            grid-template-columns: 100px minmax(0, 1fr) 80px 30px; 
+            gap: 8px; 
+            padding: 8px 4px; 
+            background: #111; 
+            border-bottom: 2px solid var(--border); 
+            align-items: center; 
+            position: sticky; 
+            top: 0; 
+            z-index: 200; 
+        }
+        
+        .track-wrapper { position: relative; margin-bottom: 2px; background: var(--panel); padding: 4px; border-bottom: 1px solid var(--border); }
+        
+        /* Track grid sizing */
+        .track-row { display: grid; grid-template-columns: 100px minmax(0, 1fr) 80px 30px; gap: 8px; align-items: center; }
+        .drawer { display: none; grid-template-columns: 100px minmax(0, 1fr) 80px 30px; gap: 8px; margin-top: 5px; padding-top: 5px; border-top: 1px dashed var(--border); background: #111111; }
+        
         .drawer.open { display: grid; }
-        .drawer-ctrl { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 4px; background: #000; border: 1px solid var(--border); padding: 5px; }
-        .roll-container { grid-column: 2; height: 120px; background: #000; position: relative; border: 1px solid var(--border); display: grid; grid-template-columns: repeat(32, 1fr); }
-        .roll-col { border-right: 1px solid #1a222b; display: flex; flex-direction: column-reverse; } .roll-col:nth-child(4n) { border-right: 1px solid #334050; }
-        .roll-cell { flex: 1; border-top: 1px solid #1a222b; cursor: pointer; position: relative; } .roll-cell:hover { background: #1a222b; }
-        .roll-cell.black-key { background: #0a0e14; } .roll-cell.active { background: var(--accent); box-shadow: 0 0 10px var(--accent-glow); z-index: 2; }
-        .vel-grid { grid-column: 2; display: grid; grid-template-columns: repeat(32, 1fr); gap: 2px; height: 60px; background: #000; padding: 2px; border: 1px solid var(--border); }
-        .vel-bar-slot { position: relative; background: #0a0e14; cursor: ns-resize; display: flex; align-items: flex-end; } .vel-bar-fill { width: 100%; background: var(--accent); opacity: 0.7; pointer-events: none; } .vel-bar-slot:hover { background: #1a222b; }
-        #tracks-scroll-area { flex-grow: 1; overflow-y: auto; padding: 10px; } #tracks-scroll-area::-webkit-scrollbar { width: 8px; } #tracks-scroll-area::-webkit-scrollbar-track { background: #000; } #tracks-scroll-area::-webkit-scrollbar-thumb { background: var(--border); }
-        .step-grid { display: grid; grid-template-columns: repeat(32, 1fr); gap: 2px; width: 100%; height: 100%; }
-        .step { height: 24px; cursor: pointer; background: var(--step-off); transition: background 0.1s; } .step.on { background: var(--step-on); box-shadow: 0 0 10px var(--accent-glow); } .step.beat-mark { border-left: 1px solid #333; }
-        .step.gen-mode { background: #4a235a; } .step.gen-mode.on { background: #d066ff; box-shadow: 0 0 10px rgba(208, 102, 255, 0.5); }
-        .playhead-slot { width: 4px; height: 4px; background: #333; margin: auto; transition: all 0.05s; } .playhead-slot.active { background: #fff; height: 100%; box-shadow: 0 0 10px #fff; }
-        #song-arranger-panel { padding: 10px; flex-shrink: 0; background: var(--panel); border-top: 1px solid var(--border); } #song-arranger-box { background: #000; padding: 8px; margin-top: 5px; overflow-x: auto; display: flex; gap: 5px; align-items: center; border: 1px solid var(--border); } #song-cells button { width: 30px; padding: 5px 0; }
+        .drawer-ctrl { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 4px; background: #0a0a0a; border: 1px solid var(--border); padding: 5px; }
+        
+        /* Grid and Block Styling */
+        .step-grid { display: flex; gap: 6px; width: 100%; height: 100%; min-width: 0; }
+        .beat-container { display: flex; gap: 2px; flex: 1; min-width: 0; background: #121212; border: 1px solid #2a2a2a; padding: 3px; border-radius: 0; }
+        .beat-container:nth-child(even) { background: #161616; border-color: #333333; }
+        
+        .step { flex: 1; height: 24px; cursor: pointer; background: var(--step-off); transition: background 0.1s; border-radius: 0; } 
+        .step.on { background: var(--step-on); box-shadow: 0 0 10px var(--accent-glow); } 
+        .step.gen-mode { background: #4a235a; } 
+        .step.gen-mode.on { background: #d066ff; box-shadow: 0 0 10px rgba(208, 102, 255, 0.5); }
+        
+        .playhead-slot { flex: 1; height: 4px; background: #333; margin: auto 0; transition: all 0.05s; } 
+        .playhead-slot.active { background: #fff; height: 100%; box-shadow: 0 0 10px #fff; }
+        
+        /* Piano Roll & Velocity */
+        .roll-col { flex: 1; border-right: 1px solid #2a2a2a; display: flex; flex-direction: column-reverse; } 
+        .roll-col:last-child { border-right: none; }
+        .roll-cell { flex: 1; border-top: 1px solid #2a2a2a; cursor: pointer; position: relative; } .roll-cell:hover { background: #2a2a2a; }
+        .roll-cell.black-key { background: #111111; } .roll-cell.active { background: var(--accent); box-shadow: 0 0 10px var(--accent-glow); z-index: 2; }
+        
+        .vel-bar-slot { flex: 1; position: relative; background: #111111; cursor: ns-resize; display: flex; align-items: flex-end; } 
+        .vel-bar-fill { width: 100%; background: var(--accent); opacity: 0.7; pointer-events: none; } 
+        .vel-bar-slot:hover { background: #2a2a2a; }
+        
+        #song-arranger-panel { padding: 10px; flex-shrink: 0; background: var(--panel); border-top: 1px solid var(--border); z-index: 300; position: relative; } 
+        #song-arranger-box { background: #0a0a0a; padding: 8px; margin-top: 5px; overflow-x: auto; display: flex; gap: 5px; align-items: center; border: 1px solid var(--border); } 
+        #song-cells button { width: 30px; padding: 5px 0; }
         
         /* --- MIXER --- */
         #page-mix { flex-grow: 1; display: none; flex-direction: column; min-height: 0; }
-        .mixer-rack { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; flex-grow: 1; padding: 10px; background: #000; border: 1px solid var(--border); overflow: hidden; }
+        .mixer-rack { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; flex-grow: 1; padding: 10px; background: #0a0a0a; border: 1px solid var(--border); overflow: hidden; }
         .mixer-strip { border: 1px solid var(--border); padding: 10px; background: var(--surface); display: flex; flex-direction: column; height: 100%; overflow: hidden; box-sizing: border-box; }
-        .fx-stack { flex-grow: 1; min-height: 0; margin: 10px 0; border: 1px solid #000; background: #05080c; padding: 5px; overflow-y: auto; }
-        .fx-stack::-webkit-scrollbar { width: 6px; } .fx-stack::-webkit-scrollbar-track { background: #05080c; } .fx-stack::-webkit-scrollbar-thumb { background: var(--border); border-radius: 0; }
-        .fx-box { margin-bottom: 5px; background: #000; border: 1px solid var(--border); flex-shrink: 0; }
-        .fx-box.drag-over { border: 1px solid var(--accent); background: #0a1f20; }
-        .fx-handle { height: 14px; background: #0e131a; color: var(--text); font-size: 8px; display: flex; justify-content: center; align-items: center; cursor: grab; letter-spacing: 2px; border-bottom: 1px solid var(--border); } .fx-handle:hover { background: #1a222b; color: var(--accent); } .fx-handle:active { cursor: grabbing; background: var(--accent); color: #000; }
+        .fx-stack { flex-grow: 1; min-height: 0; margin: 10px 0; border: 1px solid #111; background: #111111; padding: 5px; overflow-y: auto; }
+        .fx-stack::-webkit-scrollbar { width: 6px; } .fx-stack::-webkit-scrollbar-track { background: #111; } .fx-stack::-webkit-scrollbar-thumb { background: var(--border); border-radius: 0; }
+        .fx-box { margin-bottom: 5px; background: #0a0a0a; border: 1px solid var(--border); flex-shrink: 0; }
+        .fx-box.drag-over { border: 1px solid var(--accent); background: #1a2a2a; }
+        .fx-handle { height: 14px; background: #1a1a1a; color: var(--text); font-size: 8px; display: flex; justify-content: center; align-items: center; cursor: grab; letter-spacing: 2px; border-bottom: 1px solid var(--border); } .fx-handle:hover { background: #2a2a2a; color: var(--accent); } .fx-handle:active { cursor: grabbing; background: var(--accent); color: #000; }
         
         .flex { display: flex; gap: 10px; align-items: center; } .ctrl-group { border-right: 1px solid var(--border); padding-right: 15px; margin-right: 5px; display: flex; align-items: center; gap: 15px; } .ctrl-group:last-child { border: none; }
         .mini-slider-box { display: flex; flex-direction: column; width: 100px; position: relative; top: -2px; } .mini-slider-box label { font-size: 10px; color: var(--text); margin-bottom: 4px; letter-spacing: 1px; font-weight: bold; }
         input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; cursor: pointer; margin: 0; } input[type=range]:focus { outline: none; } input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 2px; background: #333; } input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 10px; width: 10px; background: var(--accent); margin-top: -4px; border-radius: 0; border: 1px solid #000; }
-        input[type=number] { background: #000; color: var(--accent); border: 1px solid var(--border); padding-left: 5px; width: 100%; font-family: var(--main-font); font-weight: bold; font-size: 12px; border-radius: 0; }
+        input[type=number] { background: #0a0a0a; color: var(--accent); border: 1px solid var(--border); padding-left: 5px; width: 100%; font-family: var(--main-font); font-weight: bold; font-size: 12px; border-radius: 0; }
         button { background: var(--btn-bg); color: var(--text); border: 1px solid var(--border); cursor: pointer; padding: 6px 12px; font-size: 11px; font-weight: normal; text-transform: uppercase; font-family: var(--main-font); transition: all 0.1s ease; border-radius: 0; } button:hover { background: var(--btn-hover); color: var(--text-bright); border-color: var(--text-bright); } button:active { transform: translateY(1px); }
         button.active { background: var(--accent-dim); color: #fff; border-color: var(--accent); box-shadow: 0 0 10px var(--accent-glow); } button.gen-active { background: #6c3483; color: #fff; border-color: #af7ac5; } button.recording { background: var(--rec); color: #fff; border-color: #fff; box-shadow: 0 0 10px var(--rec); }
         button.btn-mute.active { background: var(--warn); color: #000; border-color: #fff; box-shadow: none; } button.btn-solo.active { background: var(--good); color: #000; border-color: #fff; box-shadow: none; }
         .data-font { font-size: 11px; letter-spacing: 1px; color: var(--text-bright); font-family: var(--main-font); } #status-led { width: 6px; height: 6px; background: #333; } #status-led.online { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
-        select { background: #000; color: var(--text-bright); border: 1px solid var(--border); padding: 4px; width: 100%; font-family: var(--main-font); font-size: 11px; border-radius: 0; } .btn-tiny { padding: 2px 5px; font-size: 10px; line-height: 1; } .btn-group { display: flex; gap: 1px; width: 100%; margin-top: 2px; } .btn-group button { flex: 1; }
+        
+        .btn-tiny { padding: 2px 5px; font-size: 10px; line-height: 1; } .btn-group { display: flex; gap: 1px; width: 100%; margin-top: 2px; } .btn-group button { flex: 1; }
+        
+        /* Stepper styles */
+        .stepper-container { display: flex; align-items: center; justify-content: space-between; background: #0a0a0a; border: 1px solid var(--border); padding: 2px; width: 100%; height: 26px; box-sizing: border-box; }
+        .stepper-btn { width: 22px; height: 100%; padding: 0; background: #1a1a1a; display: flex; justify-content: center; align-items: center; }
+        .stepper-val { font-size: 10px; color: var(--text-bright); }
     </style>
 </head>
 <body>
@@ -107,16 +171,18 @@
         <div id="track-rack-container">
             <div id="track-toolbar">
                 <button onclick="engine.addTrack()">+ TRACK</button>
-                <div class="flex" style="background: #000; padding: 2px 5px; border: 1px solid var(--border);">
+                <div class="flex" style="background: #0a0a0a; padding: 2px 5px; border: 1px solid var(--border);">
                     <button onclick="engine.updateBankLength(-1)" style="padding: 2px 8px; height: 20px;">&lt;</button>
                     <span class="data-font" id="bank-len-disp" style="min-width:110px; text-align:center; line-height: 20px;">PAT 1 LEN: 16</span>
                     <button onclick="engine.updateBankLength(1)" style="padding: 2px 8px; height: 20px;">&gt;</button>
                 </div>
             </div>
-            <div id="timeline-header">
-                <div></div><div id="playhead-grid" class="step-grid"></div><div></div><div></div>
+            <div id="tracks-scroll-area">
+                <div id="timeline-header">
+                    <div></div><div id="playhead-grid" class="step-grid"></div><div></div><div></div>
+                </div>
+                <div id="tracks-list"></div>
             </div>
-            <div id="tracks-scroll-area"><div id="tracks-list"></div></div>
         </div>
         <div id="song-arranger-panel" class="panel">
             <div class="data-font">SONG_ARRANGER</div>
@@ -280,7 +346,6 @@ const engine = {
                 if (!this.mixer[tr.bus]) return;
                 const ch = this.mixer[tr.bus];
                 const vel = (tr.velocities && tr.velocities[b]) ? tr.velocities[b][s] : 1;
-                // Note 36 in your formula calculates out to ~261.63 Hz (1.0x native sample speed)
                 const absNote = (tr.notes && tr.notes[b]) ? tr.notes[b][s] : 36;
                 const finalNote = absNote + (tr.transpose * 12);
                 const freq = 32.703 * Math.pow(2, finalNote / 12);
@@ -356,9 +421,7 @@ const engine = {
             id: 'trk_' + Date.now() + '_' + Math.floor(Math.random()*1000), buffer: null, fileName: "EMPTY", bus: 0, activeSource: null, gainNode: null,
             patterns: Array.from({length:8}, () => Array(32).fill(false)),
             velocities: Array.from({length:8}, () => Array(32).fill(1.0)),
-            // Reverted back to 36 (equals 261.63 Hz / 1.0x speed in your custom scale)
             notes: Array.from({length:8}, () => Array(32).fill(36)),
-            // Reverted view octave back to 3
             viewOctave: 3, transpose: 0, genModes: Array(8).fill(false),
             mute: false, solo: false, drawerOpen: false, drawerMode: 'vel'
         });
@@ -444,12 +507,31 @@ const ui = {
         const list = document.getElementById('tracks-list'); if(!list) return;
         document.getElementById('bank-len-disp').innerText = `PAT ${b+1} LEN: ${engine.bankLengths[b]}`;
         list.innerHTML = '';
-        const ph = document.getElementById('playhead-grid'); ph.innerHTML = '';
-        for(let i=0; i<32; i++) ph.innerHTML += `<div class="playhead-slot"></div>`;
+        
+        const ph = document.getElementById('playhead-grid'); 
+        if (ph) {
+            ph.innerHTML = '';
+            for(let bc=0; bc<8; bc++) {
+                const beatBox = document.createElement('div');
+                beatBox.className = 'beat-container';
+                beatBox.style.background = 'transparent';
+                beatBox.style.borderColor = 'transparent';
+                for(let s=0; s<4; s++) {
+                    const slot = document.createElement('div');
+                    slot.className = 'playhead-slot';
+                    beatBox.appendChild(slot);
+                }
+                ph.appendChild(beatBox);
+            }
+        }
 
         engine.tracks.forEach((t, i) => {
             const wrapper = document.createElement('div'); wrapper.className = 'track-wrapper';
             const row = document.createElement('div'); row.className = 'track-row';
+            
+            // Generate the stepper for this specific track
+            const currentBus = t.bus || 0;
+            
             row.innerHTML = `
                 <div>
                     <div style="display:flex; gap:1px; margin-bottom:2px;">
@@ -458,16 +540,20 @@ const ui = {
                     </div>
                     <button class="btn-tiny" onclick="this.nextElementSibling.click()" style="width:100%">LOAD</button>
                     <input type="file" style="display:none" onchange="ui.loadSmp('${t.id}', this)">
-                    <div class="data-font" style="font-size:8px; margin-top:2px;">${t.fileName}</div>
+                    <div class="data-font track-label" style="font-size:8px; margin-top:2px;">${t.fileName}</div>
                     <div class="btn-group">
                         <button class="btn-tiny ${t.drawerOpen && t.drawerMode=='vel' ? 'active' : ''}" onclick="ui.toggleDrawer(${i}, 'vel')">VEL</button>
                         <button class="btn-tiny ${t.drawerOpen && t.drawerMode=='roll' ? 'active' : ''}" onclick="ui.toggleDrawer(${i}, 'roll')">NOTE</button>
                     </div>
                 </div>
                 <div class="step-grid" id="grid-${t.id}"></div>
-                <select class="data-font" onchange="engine.tracks[${i}].bus=this.value; engine.rebuildChain(this.value)">
-                    ${engine.mixer.map((_,m)=>`<option value="${m}" ${t.bus==m?'selected':''}>CH ${m+1}</option>`).join('')}
-                </select>
+                
+                <div class="stepper-container">
+                    <button class="btn-tiny stepper-btn" onclick="engine.tracks[${i}].bus = Math.max(0, ${currentBus} - 1); ui.render();">&lt;</button>
+                    <div class="data-font stepper-val">CH ${currentBus + 1}</div>
+                    <button class="btn-tiny stepper-btn" onclick="engine.tracks[${i}].bus = Math.min(7, ${currentBus} + 1); ui.render();">&gt;</button>
+                </div>
+
                 <button onclick="if(confirm('Delete Track?')) { engine.tracks.splice(${i},1); ui.render(); }" style="color:var(--danger)">X</button>
             `;
             wrapper.appendChild(row);
@@ -498,34 +584,46 @@ const ui = {
             drawer.appendChild(leftCtrl);
 
             const contentDiv = document.createElement('div'); contentDiv.style.display="contents";
+            
             if (t.drawerMode === 'vel') {
-                let velHTML = `<div class="vel-grid">`;
+                let velHTML = `<div class="step-grid" style="grid-column: 2; height: 60px;">`;
                 const currentVels = (t.velocities && t.velocities[b]) ? t.velocities[b] : Array(32).fill(1.0);
-                for(let s=0; s<32; s++) {
-                    const opacity = s >= engine.bankLengths[b] ? 0.2 : 1;
-                    const h = currentVels[s] * 100;
-                    velHTML += `<div class="vel-bar-slot" style="opacity:${opacity}"
-                                   onmousedown="ui.handleVelInput(event, ${i}, ${s})"
-                                   onmousemove="ui.handleVelInput(event, ${i}, ${s})">
-                                    <div class="vel-bar-fill" style="height:${h}%"></div>
-                                </div>`;
+                for(let bc=0; bc<8; bc++) {
+                    velHTML += `<div class="beat-container">`;
+                    for(let sub=0; sub<4; sub++) {
+                        const s = bc * 4 + sub;
+                        const opacity = s >= engine.bankLengths[b] ? 0.2 : 1;
+                        const h = currentVels[s] * 100;
+                        velHTML += `<div class="vel-bar-slot" style="opacity:${opacity}"
+                                       onmousedown="ui.handleVelInput(event, ${i}, ${s})"
+                                       onmousemove="ui.handleVelInput(event, ${i}, ${s})">
+                                        <div class="vel-bar-fill" style="height:${h}%"></div>
+                                    </div>`;
+                    }
+                    velHTML += `</div>`;
                 }
                 velHTML += `</div>`; contentDiv.innerHTML = velHTML;
             } else {
                 const noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
                 const blackKeys = [1, 3, 6, 8, 10];
-                let rollHTML = `<div class="roll-container">`;
+                let rollHTML = `<div class="step-grid" style="grid-column: 2; height: 120px;">`;
                 const currentNotes = (t.notes && t.notes[b]) ? t.notes[b] : Array(32).fill(36);
                 const currentPats = t.patterns[b]; const viewBase = t.viewOctave * 12;
-                for(let s=0; s<32; s++) {
-                    const opacity = s >= engine.bankLengths[b] ? 0.2 : 1;
-                    rollHTML += `<div class="roll-col" style="opacity:${opacity}">`;
-                    for (let n = 0; n < 12; n++) {
-                        const isBlack = blackKeys.includes(n); const absVal = viewBase + n;
-                        const isActive = currentPats[s] && currentNotes[s] === absVal;
-                        rollHTML += `<div class="roll-cell ${isBlack ? 'black-key' : ''} ${isActive ? 'active' : ''}"
-                                         onclick="ui.setNote(${i}, ${s}, ${n})"
-                                         title="${noteNames[n]} ${t.viewOctave}"></div>`;
+                
+                for(let bc=0; bc<8; bc++) {
+                    rollHTML += `<div class="beat-container">`;
+                    for(let sub=0; sub<4; sub++) {
+                        const s = bc * 4 + sub;
+                        const opacity = s >= engine.bankLengths[b] ? 0.2 : 1;
+                        rollHTML += `<div class="roll-col" style="opacity:${opacity}">`;
+                        for (let n = 0; n < 12; n++) {
+                            const isBlack = blackKeys.includes(n); const absVal = viewBase + n;
+                            const isActive = currentPats[s] && currentNotes[s] === absVal;
+                            rollHTML += `<div class="roll-cell ${isBlack ? 'black-key' : ''} ${isActive ? 'active' : ''}"
+                                             onclick="ui.setNote(${i}, ${s}, ${n})"
+                                             title="${noteNames[n]} ${t.viewOctave}"></div>`;
+                        }
+                        rollHTML += `</div>`;
                     }
                     rollHTML += `</div>`;
                 }
@@ -535,12 +633,18 @@ const ui = {
 
             const grid = document.getElementById(`grid-${t.id}`);
             if(!t.genModes) t.genModes = Array(8).fill(false);
-            for(let s=0; s<32; s++) {
-                const step = document.createElement('div'); const isGen = t.genModes[b];
-                step.className = `step ${t.patterns[b][s] ? 'on' : ''} ${s % 4 === 0 ? 'beat-mark' : ''} ${isGen ? 'gen-mode' : ''}`;
-                step.style.opacity = s >= engine.bankLengths[b] ? "0.1" : "1";
-                step.onclick = () => { if(s < engine.bankLengths[b]) { t.patterns[b][s] = !t.patterns[b][s]; step.classList.toggle('on'); } };
-                grid.appendChild(step);
+            for(let bc=0; bc<8; bc++) {
+                const beatBox = document.createElement('div');
+                beatBox.className = 'beat-container';
+                for(let sub=0; sub<4; sub++) {
+                    const s = bc * 4 + sub;
+                    const step = document.createElement('div'); const isGen = t.genModes[b];
+                    step.className = `step ${t.patterns[b][s] ? 'on' : ''} ${isGen ? 'gen-mode' : ''}`;
+                    step.style.opacity = s >= engine.bankLengths[b] ? "0.1" : "1";
+                    step.onclick = () => { if(s < engine.bankLengths[b]) { t.patterns[b][s] = !t.patterns[b][s]; step.classList.toggle('on'); } };
+                    beatBox.appendChild(step);
+                }
+                grid.appendChild(beatBox);
             }
         });
         this.renderBanks(); this.renderSong();
@@ -589,9 +693,10 @@ const ui = {
     },
     updatePlayhead(s) {
         const ph = document.getElementById('playhead-grid');
-        if(ph && ph.children[s]) {
-            Array.from(ph.children).forEach(c => c.classList.remove('active'));
-            ph.children[s].classList.add('active');
+        if(ph) {
+            const slots = ph.querySelectorAll('.playhead-slot');
+            slots.forEach(c => c.classList.remove('active'));
+            if(slots[s]) slots[s].classList.add('active');
         }
     },
     renderBanks() {
@@ -634,11 +739,11 @@ const io = {
         
         const mixerData = engine.mixer.map(m => ({ gain: m.output.gain.value, fxData: m.fx.map(f => ({ code: f._sourceCode || "", state: (f.getState) ? f.getState() : null })) }));
         const projectData = {
-            version: "9.7", bpm: engine.bpm, bankLengths: engine.bankLengths, song: engine.song, swing: engine.swing, mode: ui.mode, tracks: tracksMeta, mixer: mixerData
+            version: "10.1", bpm: engine.bpm, bankLengths: engine.bankLengths, song: engine.song, swing: engine.swing, mode: ui.mode, tracks: tracksMeta, mixer: mixerData
         };
         zip.file("project.json", JSON.stringify(projectData));
         const blob = await zip.generateAsync({type:"blob"});
-        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = "megaproject_v9.daw"; a.click();
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = "megaproject_v10.daw"; a.click();
     },
     async importSession(el) {
         if(!el.files[0]) return;
@@ -673,7 +778,6 @@ const io = {
                 engine.tracks.push({
                     id: tMeta.id, bus: tMeta.bus, patterns: tMeta.patterns, fileName: tMeta.fileName, buffer: newBuffer, activeSource: null, gainNode: null,
                     velocities: tMeta.velocities || Array.from({length:8}, () => Array(32).fill(1.0)),
-                    // Reverted import fallback back to 36 and view octave 3
                     notes: tMeta.notes || Array.from({length:8}, () => Array(32).fill(36)),
                     viewOctave: (tMeta.viewOctave !== undefined) ? tMeta.viewOctave : 3, transpose: tMeta.transpose || 0,
                     genModes: Array.isArray(tMeta.genModes) ? tMeta.genModes : Array(8).fill(!!tMeta.genMode),
